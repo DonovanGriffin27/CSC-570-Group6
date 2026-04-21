@@ -1,25 +1,48 @@
 import { useState } from "react";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import Sidebar from "./components/Sidebar";
+import LoginPage from "./pages/LoginPage";
+import AccountRequestPage from "./pages/AccountRequestPage";
 import InvestigatorPage from "./pages/InvestigatorPage";
 import EvidencePage from "./pages/EvidencePage";
 import AdminPage from "./pages/AdminPage";
 
-function App() {
+// Inner component so it can read the auth context
+function AppShell() {
+  const { user } = useAuth();
   const [activePage, setActivePage] = useState("investigator");
+  const [showRequestForm, setShowRequestForm] = useState(false);
 
+  // ── Not logged in ──────────────────────────────────────────────────────
+  if (!user) {
+    if (showRequestForm) {
+      return <AccountRequestPage onBack={() => setShowRequestForm(false)} />;
+    }
+    return <LoginPage onRequestAccount={() => setShowRequestForm(true)} />;
+  }
+
+  // ── Logged in ──────────────────────────────────────────────────────────
   const renderPage = () => {
     if (activePage === "investigator") return <InvestigatorPage />;
-    if (activePage === "evidence") return <EvidencePage />;
-    if (activePage === "admin") return <AdminPage />;
+    if (activePage === "evidence")     return <EvidencePage />;
+    if (activePage === "admin")        return <AdminPage />;
   };
 
   return (
-    <div style={{ display: "flex" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      <div style={{ flex: 1, padding: "30px", background: "#0f0f1a", minHeight: "100vh", color: "white" }}>
+      <div style={{ flex: 1, padding: "30px", background: "#0f0f1a", color: "white", overflowY: "auto" }}>
         {renderPage()}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }
 
