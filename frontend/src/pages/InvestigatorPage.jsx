@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import CaseDetailPage from "./CaseDetailPage";
 
 const priorityColor = (p) =>
   p === "High" ? "#ff4d4d" : p === "Medium" ? "#ffaa00" : "#00cc66";
 
 function InvestigatorPage() {
   const [cases, setCases] = useState([]);
+  const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [search, setSearch] = useState("");
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportType, setReportType] = useState("Violent Crime");
@@ -48,6 +50,9 @@ function InvestigatorPage() {
       (c.title && c.title.toLowerCase().includes(term))
     );
   });
+
+  if (selectedCaseId)
+    return <CaseDetailPage caseId={selectedCaseId} onBack={() => setSelectedCaseId(null)} />;
 
   return (
     <div>
@@ -112,6 +117,7 @@ function InvestigatorPage() {
             filteredCases.map((c) => (
               <div
                 key={c.case_id}
+                onClick={() => setSelectedCaseId(c.case_id)}
                 style={{ background: "#1a1a2e", padding: "15px", borderRadius: "6px", border: `1px solid ${priorityColor(c.priority)}`, cursor: "pointer" }}
               >
                 <div style={{ fontWeight: "bold", marginBottom: "6px" }}>{c.case_number}</div>
