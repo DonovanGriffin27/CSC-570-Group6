@@ -1,9 +1,7 @@
 from db.connection import get_connection
 
 
-# ─────────────────────────────────────────────
 #  User lookup
-# ─────────────────────────────────────────────
 
 def get_user_by_email(conn, email: str):
     """Return the users row for the given email, or None."""
@@ -39,10 +37,7 @@ def get_user_role(conn, user_id: int) -> str | None:
             return "investigator"
     return None
 
-
-# ─────────────────────────────────────────────
 #  Account requests (sign-up flow)
-# ─────────────────────────────────────────────
 
 def create_account_request(conn, first_name, last_name, contact_email,
                            contact_phone, department_id, requested_role,

@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import CaseDetailPage from "./CaseDetailPage";
+import { useAuth } from "../context/AuthContext";
 
 const priorityColor = (p) =>
   p === "High" ? "#ff4d4d" : p === "Medium" ? "#ffaa00" : "#00cc66";
 
 function InvestigatorPage() {
+  const { user } = useAuth();
   const [cases, setCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [search, setSearch] = useState("");
@@ -13,7 +15,7 @@ function InvestigatorPage() {
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
 
-  const INVESTIGATOR_ID = 1;
+  const INVESTIGATOR_ID = user?.user_id;
 
   const REPORT_TYPES = [
     "Violent Crime", "Property Crime", "Drug Offense",
