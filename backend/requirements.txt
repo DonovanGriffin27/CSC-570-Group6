@@ -1,6 +1,0 @@
-psycopg2-binary
-python-dotenv
-fastapi
-uvicorn
-python-jose
-passlib[bcrypt]
