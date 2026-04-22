@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.connection import get_connection
 from db.queries.case_queries import create_case
 from db.queries.crime_report_queries import create_crime_report, get_reports_by_case
+from middleware.auth_middleware import get_current_user
 from enum import Enum
 
 router = APIRouter()
@@ -18,16 +19,17 @@ class ReportTypeEnum(str, Enum):
     Other = "Other"
 
 class CrimeReportCreate(BaseModel):
+    title: str
     report_type: ReportTypeEnum
     description: str
 
 @router.post("/crime-reports")
-def file_crime_report(report: CrimeReportCreate):
+def file_crime_report(report: CrimeReportCreate, current_user=Depends(get_current_user)):
     conn = get_connection()
 
     try:
-        case_id, case_number = create_case(conn, "Low")
-        report_id = create_crime_report(conn, case_id, 1, report.report_type, report.description)
+        case_id, case_number = create_case(conn, "Low", title=report.title)
+        report_id = create_crime_report(conn, case_id, current_user["user_id"], report.report_type, report.description)
         return {
             "case_id": case_id,
             "case_number": case_number,
@@ -40,7 +42,7 @@ def file_crime_report(report: CrimeReportCreate):
         conn.close()
 
 @router.get("/crime-reports/{case_id}")
-def get_case_reports(case_id: int):
+def get_case_reports(case_id: int, current_user=Depends(get_current_user)):
     conn = get_connection()
     reports = get_reports_by_case(conn, case_id)
     conn.close()

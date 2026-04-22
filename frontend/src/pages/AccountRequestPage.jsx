@@ -11,6 +11,13 @@ const RANKS = [
   'CHIEF'
 ];
 
+// SUPER_ADMIN cannot be self-requested — only assigned by an existing super admin
+const ADMIN_LEVELS = [
+  { value: "ADMIN",      label: "Admin — operational management" },
+  { value: "SUPERVISOR", label: "Supervisor — review & limited interaction" },
+  { value: "VIEWER",     label: "Viewer — read-only access" },
+];
+
 function AccountRequestPage({ onBack }) {
   const [form, setForm] = useState({
     first_name: "",
@@ -19,6 +26,7 @@ function AccountRequestPage({ onBack }) {
     contact_phone: "",
     department_id: "",
     requested_role: "investigator",
+    requested_admin_level: "ADMIN",
     badge_number: "",
     rank: "",
     password: "",
@@ -39,6 +47,7 @@ function AccountRequestPage({ onBack }) {
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   const isInvestigator = form.requested_role === "investigator";
+  const isAdmin = form.requested_role === "admin";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -75,8 +84,9 @@ function AccountRequestPage({ onBack }) {
         contact_phone: form.contact_phone || null,
         department_id: parseInt(form.department_id),
         requested_role: form.requested_role,
-        badge_number: form.badge_number || null,
-        rank: form.rank || null,
+        requested_admin_level: isAdmin ? form.requested_admin_level : null,
+        badge_number: isInvestigator ? (form.badge_number || null) : null,
+        rank: isInvestigator ? (form.rank || null) : null,
         password: form.password,
       };
 
@@ -172,28 +182,49 @@ function AccountRequestPage({ onBack }) {
               </Field>
             </div>
 
-            {/* Badge + Rank — required for investigators */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <Field label={`Badge Number${isInvestigator ? " *" : " (optional)"}`}>
-                <input
-                  value={form.badge_number}
-                  onChange={set("badge_number")}
-                  required={isInvestigator}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label={`Rank${isInvestigator ? " *" : " (optional)"}`}>
+            {/* Admin level — shown only for admin role */}
+            {isAdmin && (
+              <Field label="Requested Access Level *">
                 <select
-                  value={form.rank}
-                  onChange={set("rank")}
-                  required={isInvestigator}
+                  value={form.requested_admin_level}
+                  onChange={set("requested_admin_level")}
+                  required
                   style={inputStyle}
                 >
-                  <option value="">Select rank...</option>
-                  {RANKS.map((r) => <option key={r}>{r}</option>)}
+                  {ADMIN_LEVELS.map((l) => (
+                    <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
                 </select>
+                <div style={{ fontSize: "11px", color: "#555", marginTop: "5px" }}>
+                  Super Admin access can only be granted by an existing Super Admin after approval.
+                </div>
               </Field>
-            </div>
+            )}
+
+            {/* Badge + Rank — shown only for investigator role */}
+            {isInvestigator && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <Field label="Badge Number *">
+                  <input
+                    value={form.badge_number}
+                    onChange={set("badge_number")}
+                    required
+                    style={inputStyle}
+                  />
+                </Field>
+                <Field label="Rank *">
+                  <select
+                    value={form.rank}
+                    onChange={set("rank")}
+                    required
+                    style={inputStyle}
+                  >
+                    <option value="">Select rank...</option>
+                    {RANKS.map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                </Field>
+              </div>
+            )}
 
             <Field label="Password *">
               <input type="password" value={form.password} onChange={set("password")} required style={inputStyle} />

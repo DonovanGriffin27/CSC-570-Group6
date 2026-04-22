@@ -2,15 +2,17 @@ import { useState, useEffect } from "react";
 import CaseDetailPage from "./CaseDetailPage";
 import { useAuth } from "../context/AuthContext";
 
+
 const priorityColor = (p) =>
   p === "High" ? "#ff4d4d" : p === "Medium" ? "#ffaa00" : "#00cc66";
 
 function InvestigatorPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [cases, setCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [search, setSearch] = useState("");
   const [showReportForm, setShowReportForm] = useState(false);
+  const [caseTitle, setCaseTitle] = useState("");
   const [reportType, setReportType] = useState("Violent Crime");
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
@@ -28,7 +30,9 @@ function InvestigatorPage() {
   }, []);
 
   const fetchCases = async () => {
-    const res = await fetch(`http://127.0.0.1:8000/assignments/investigator/${INVESTIGATOR_ID}`);
+    const res = await fetch(`http://127.0.0.1:8000/assignments/investigator/${INVESTIGATOR_ID}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const data = await res.json();
     setCases(data);
   };
@@ -36,13 +40,22 @@ function InvestigatorPage() {
   const fileCrimeReport = async () => {
     const res = await fetch("http://127.0.0.1:8000/crime-reports", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_type: reportType, description }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ title: caseTitle, report_type: reportType, description }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      setMessage(`Error: ${data.detail || "Failed to file report."}`);
+      return;
+    }
     setMessage(`Report filed. Case ${data.case_number} created.`);
     setShowReportForm(false);
+    setCaseTitle("");
     setDescription("");
+    fetchCases();
   };
 
   const filteredCases = cases.filter((c) => {
@@ -77,6 +90,12 @@ function InvestigatorPage() {
         <div style={{ background: "#1a1a2e", padding: "20px", borderRadius: "6px", border: "1px solid #333", marginBottom: "20px" }}>
           <h3 style={{ marginBottom: "15px" }}>New Crime Report</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <input
+              placeholder="Case title (e.g. Warehouse Break-In on 5th Ave) *"
+              value={caseTitle}
+              onChange={(e) => setCaseTitle(e.target.value)}
+              style={{ padding: "8px", borderRadius: "4px", border: "1px solid #444", background: "#0f0f1a", color: "white" }}
+            />
             <select
               value={reportType}
               onChange={(e) => setReportType(e.target.value)}
@@ -93,7 +112,8 @@ function InvestigatorPage() {
             />
             <button
               onClick={fileCrimeReport}
-              style={{ padding: "8px 16px", background: "#00d4ff", color: "#0f0f1a", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", alignSelf: "flex-start" }}
+              disabled={!caseTitle.trim()}
+              style={{ padding: "8px 16px", background: "#00d4ff", color: "#0f0f1a", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold", alignSelf: "flex-start", opacity: caseTitle.trim() ? 1 : 0.5 }}
             >
               Submit Report
             </button>

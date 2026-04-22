@@ -1,6 +1,3 @@
-from db.connection import get_connection
-
-
 #  User lookup
 
 def get_user_by_email(conn, email: str):
@@ -8,7 +5,7 @@ def get_user_by_email(conn, email: str):
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT user_id, first_name, last_name, contact_email, password_hash
+            SELECT user_id, first_name, last_name, contact_email, password_hash, department_id
             FROM users
             WHERE contact_email = %s
             """,
@@ -23,6 +20,7 @@ def get_user_by_email(conn, email: str):
         "last_name": row[2],
         "email": row[3],
         "password_hash": row[4],
+        "department_id": row[5],
     }
 
 
@@ -37,23 +35,84 @@ def get_user_role(conn, user_id: int) -> str | None:
             return "investigator"
     return None
 
+
+def get_admin_level(conn, user_id: int) -> str | None:
+    """Return the admin_level enum value for the given user, or None."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT admin_level FROM admin WHERE user_id = %s", (user_id,))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def get_all_investigators(conn, department_id=None) -> list:
+    with conn.cursor() as cur:
+        if department_id is not None:
+            cur.execute("""
+                SELECT u.user_id, u.first_name, u.last_name, i.badge_number, i.rank
+                FROM users u
+                JOIN investigator i ON u.user_id = i.user_id
+                WHERE u.department_id = %s
+                ORDER BY u.last_name, u.first_name
+            """, (department_id,))
+        else:
+            cur.execute("""
+                SELECT u.user_id, u.first_name, u.last_name, i.badge_number, i.rank
+                FROM users u
+                JOIN investigator i ON u.user_id = i.user_id
+                ORDER BY u.last_name, u.first_name
+            """)
+        rows = cur.fetchall()
+    return [
+        {"user_id": r[0], "first_name": r[1], "last_name": r[2],
+         "badge_number": r[3], "rank": r[4]}
+        for r in rows
+    ]
+
+
+def get_all_admins(conn) -> list:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT u.user_id, u.first_name, u.last_name, u.contact_email, a.admin_level
+            FROM users u
+            JOIN admin a ON u.user_id = a.user_id
+            ORDER BY a.admin_level, u.last_name
+        """)
+        rows = cur.fetchall()
+    return [
+        {"user_id": r[0], "first_name": r[1], "last_name": r[2],
+         "email": r[3], "admin_level": r[4]}
+        for r in rows
+    ]
+
+
+def update_admin_level(conn, user_id: int, new_level: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE admin SET admin_level = %s WHERE user_id = %s",
+            (new_level, user_id),
+        )
+    conn.commit()
+
 #  Account requests (sign-up flow)
 
 def create_account_request(conn, first_name, last_name, contact_email,
                            contact_phone, department_id, requested_role,
-                           badge_number, rank, password_hash):
+                           badge_number, rank, password_hash,
+                           requested_admin_level=None):
     """Insert a new account request; return the new request_id."""
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO account_request
               (first_name, last_name, contact_email, contact_phone,
-               department_id, requested_role, badge_number, rank, password_hash)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               department_id, requested_role, requested_admin_level,
+               badge_number, rank, password_hash)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING request_id
             """,
             (first_name, last_name, contact_email, contact_phone,
-             department_id, requested_role, badge_number, rank, password_hash),
+             department_id, requested_role, requested_admin_level,
+             badge_number, rank, password_hash),
         )
         request_id = cur.fetchone()[0]
     conn.commit()
@@ -68,7 +127,7 @@ def get_account_requests(conn, status_filter: str | None = None):
                 """
                 SELECT request_id, first_name, last_name, contact_email,
                        contact_phone, department_id, requested_role,
-                       badge_number, rank, status, requested_at
+                       requested_admin_level, badge_number, rank, status, requested_at
                 FROM account_request
                 WHERE status = %s
                 ORDER BY requested_at DESC
@@ -80,7 +139,7 @@ def get_account_requests(conn, status_filter: str | None = None):
                 """
                 SELECT request_id, first_name, last_name, contact_email,
                        contact_phone, department_id, requested_role,
-                       badge_number, rank, status, requested_at
+                       requested_admin_level, badge_number, rank, status, requested_at
                 FROM account_request
                 ORDER BY requested_at DESC
                 """
@@ -89,7 +148,7 @@ def get_account_requests(conn, status_filter: str | None = None):
 
     keys = ["request_id", "first_name", "last_name", "contact_email",
             "contact_phone", "department_id", "requested_role",
-            "badge_number", "rank", "status", "requested_at"]
+            "requested_admin_level", "badge_number", "rank", "status", "requested_at"]
     return [dict(zip(keys, r)) for r in rows]
 
 
@@ -99,7 +158,7 @@ def get_account_request_by_id(conn, request_id: int):
             """
             SELECT request_id, first_name, last_name, contact_email,
                    contact_phone, department_id, requested_role,
-                   badge_number, rank, password_hash, status
+                   requested_admin_level, badge_number, rank, password_hash, status
             FROM account_request
             WHERE request_id = %s
             """,
@@ -110,7 +169,7 @@ def get_account_request_by_id(conn, request_id: int):
         return None
     keys = ["request_id", "first_name", "last_name", "contact_email",
             "contact_phone", "department_id", "requested_role",
-            "badge_number", "rank", "password_hash", "status"]
+            "requested_admin_level", "badge_number", "rank", "password_hash", "status"]
     return dict(zip(keys, row))
 
 
@@ -150,9 +209,10 @@ def approve_account_request(conn, request_id: int, reviewed_by: int):
         # Create the role row
         role = req["requested_role"]
         if role == "admin":
+            admin_level = req.get("requested_admin_level") or "ADMIN"
             cur.execute(
-                "INSERT INTO admin (user_id, admin_level) VALUES (%s, 'ADMIN')",
-                (new_user_id,),
+                "INSERT INTO admin (user_id, admin_level) VALUES (%s, %s)",
+                (new_user_id, admin_level),
             )
         elif role == "investigator":
             cur.execute(

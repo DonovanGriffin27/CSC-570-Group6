@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Sidebar from "./components/Sidebar";
 import LoginPage from "./pages/LoginPage";
@@ -12,6 +12,13 @@ function AppShell() {
   const { user } = useAuth();
   const [activePage, setActivePage] = useState("investigator");
   const [showRequestForm, setShowRequestForm] = useState(false);
+
+  // Reset to the correct landing page whenever a different user logs in
+  useEffect(() => {
+    if (user) {
+      setActivePage(user.role === "admin" ? "admin" : "investigator");
+    }
+  }, [user?.user_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Not logged in ──────────────────────────────────────────────────────
   if (!user) {

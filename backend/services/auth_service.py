@@ -24,7 +24,9 @@ _ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = 30
 
 
-def create_token(user_id: int, email: str, role: str) -> str:
+def create_token(user_id: int, email: str, role: str,
+                 admin_level: str = None, department_id: int = None,
+                 name: str = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
@@ -32,6 +34,12 @@ def create_token(user_id: int, email: str, role: str) -> str:
         "role": role,
         "exp": expire,
     }
+    if admin_level:
+        payload["admin_level"] = admin_level
+    if department_id is not None:
+        payload["department_id"] = department_id
+    if name:
+        payload["name"] = name
     return jwt.encode(payload, _SECRET, algorithm=_ALGORITHM)
 
 

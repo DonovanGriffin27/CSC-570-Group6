@@ -1,11 +1,11 @@
-def create_case(conn, priority):
+def create_case(conn, priority, title=None):
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO cases (status, priority)
-        VALUES ('Open', %s)
+        INSERT INTO cases (status, priority, title)
+        VALUES ('Open', %s, %s)
         RETURNING case_id;
-    """, (priority,))
+    """, (priority, title))
 
     case_id = cur.fetchone()[0]
 
@@ -85,3 +85,55 @@ def get_all_cases(conn):
         })
 
     return cases
+
+
+def get_all_cases_overview(conn, department_id=None):
+    """All cases with their crime report type and assigned investigator names.
+    Pass department_id to scope results to one department (None = all departments)."""
+    cur = conn.cursor()
+    base = """
+        SELECT
+            c.case_id,
+            c.case_number,
+            c.title,
+            c.status,
+            c.priority,
+            c.date_opened,
+            cr.report_type,
+            COALESCE(
+                STRING_AGG(u.first_name || ' ' || u.last_name, ', ' ORDER BY u.last_name),
+                'Unassigned'
+            ) AS assigned_to
+        FROM cases c
+        INNER JOIN crime_report cr ON c.case_id = cr.case_id
+        JOIN users filing_user ON cr.filed_by_user_id = filing_user.user_id
+        LEFT JOIN assignment a ON c.case_id = a.case_id
+        LEFT JOIN users u ON a.user_id = u.user_id
+    """
+    if department_id is not None:
+        cur.execute(
+            base + "WHERE filing_user.department_id = %s "
+                   "GROUP BY c.case_id, c.case_number, c.title, c.status, c.priority, "
+                   "c.date_opened, cr.report_type ORDER BY c.date_opened DESC",
+            (department_id,),
+        )
+    else:
+        cur.execute(
+            base + "GROUP BY c.case_id, c.case_number, c.title, c.status, c.priority, "
+                   "c.date_opened, cr.report_type ORDER BY c.date_opened DESC"
+        )
+    rows = cur.fetchall()
+    cur.close()
+    return [
+        {
+            "case_id": r[0],
+            "case_number": r[1],
+            "title": r[2],
+            "status": r[3],
+            "priority": r[4],
+            "date_opened": r[5].isoformat(),
+            "report_type": r[6],
+            "assigned_to": r[7],
+        }
+        for r in rows
+    ]

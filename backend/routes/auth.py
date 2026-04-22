@@ -6,6 +6,7 @@ from db.connection import get_connection
 from db.queries.user_queries import (
     get_user_by_email,
     get_user_role,
+    get_admin_level,
     create_account_request,
     get_account_requests,
     approve_account_request,
@@ -24,16 +25,19 @@ class LoginRequest(BaseModel):
     password: str
 
 
+VALID_ADMIN_LEVELS = {"ADMIN", "SUPERVISOR", "VIEWER"}
+
 class AccountRequestCreate(BaseModel):
     first_name: str
     last_name: str
     contact_email: str
     contact_phone: Optional[str] = None
-    department_id: int                   # required — users table is NOT NULL
-    requested_role: str                  # "investigator" or "admin"
-    badge_number: Optional[str] = None   # required for investigators (validated in route)
-    rank: Optional[str] = None           # required for investigators (validated in route)
-    password: str                        # plain-text; hashed before storage
+    department_id: int                          # required — users table is NOT NULL
+    requested_role: str                         # "investigator" or "admin"
+    requested_admin_level: Optional[str] = None # required for admins
+    badge_number: Optional[str] = None          # required for investigators
+    rank: Optional[str] = None                  # required for investigators
+    password: str                               # plain-text; hashed before storage
 
 
 class ReviewDecision(BaseModel):
@@ -60,7 +64,10 @@ def login(body: LoginRequest):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Account exists but has no assigned role. Contact an admin.")
 
-        token = create_token(user["user_id"], user["email"], role)
+        admin_level = get_admin_level(conn, user["user_id"]) if role == "admin" else None
+        full_name = f"{user['first_name']} {user['last_name']}"
+        token = create_token(user["user_id"], user["email"], role,
+                             admin_level, user["department_id"], full_name)
         return {
             "access_token": token,
             "token_type": "bearer",
@@ -70,6 +77,8 @@ def login(body: LoginRequest):
                 "last_name": user["last_name"],
                 "email": user["email"],
                 "role": role,
+                "admin_level": admin_level,
+                "department_id": user["department_id"],
             },
         }
     finally:
@@ -134,6 +143,13 @@ def request_account(body: AccountRequestCreate):
         if not body.rank or not body.rank.strip():
             raise HTTPException(status_code=400, detail="Rank is required for investigators.")
 
+    if body.requested_role == "admin":
+        if not body.requested_admin_level or body.requested_admin_level not in VALID_ADMIN_LEVELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"requested_admin_level must be one of: {', '.join(sorted(VALID_ADMIN_LEVELS))}",
+            )
+
     conn = get_connection()
     try:
         pw_hash = hash_password(body.password)
@@ -145,6 +161,7 @@ def request_account(body: AccountRequestCreate):
             contact_phone=body.contact_phone,
             department_id=body.department_id,
             requested_role=body.requested_role,
+            requested_admin_level=body.requested_admin_level,
             badge_number=body.badge_number,
             rank=body.rank,
             password_hash=pw_hash,

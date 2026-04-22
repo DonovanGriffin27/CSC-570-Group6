@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.connection import get_connection
 from db.queries.assignment_queries import assign_investigator, get_assignments_by_case, get_cases_by_investigator
+from middleware.auth_middleware import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -10,7 +11,7 @@ class AssignmentCreate(BaseModel):
     user_id: int
 
 @router.post("/assignments")
-def create_assignment(body: AssignmentCreate):
+def create_assignment(body: AssignmentCreate, current_user=Depends(require_admin)):
     conn = get_connection()
     try:
         assignment_id = assign_investigator(conn, body.case_id, body.user_id)
@@ -22,7 +23,7 @@ def create_assignment(body: AssignmentCreate):
         conn.close()
 
 @router.get("/assignments/case/{case_id}")
-def get_case_assignments(case_id: int):
+def get_case_assignments(case_id: int, current_user=Depends(get_current_user)):
     conn = get_connection()
     assignments = get_assignments_by_case(conn, case_id)
     conn.close()
@@ -31,7 +32,7 @@ def get_case_assignments(case_id: int):
     return assignments
 
 @router.get("/assignments/investigator/{user_id}")
-def get_investigator_cases(user_id: int):
+def get_investigator_cases(user_id: int, current_user=Depends(get_current_user)):
     conn = get_connection()
     cases = get_cases_by_investigator(conn, user_id)
     conn.close()
