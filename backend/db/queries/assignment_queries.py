@@ -1,6 +1,14 @@
 def assign_investigator(conn, case_id, user_id):
     cur = conn.cursor()
 
+    cur.execute(
+        "SELECT 1 FROM assignment WHERE case_id = %s AND user_id = %s",
+        (case_id, user_id),
+    )
+    if cur.fetchone():
+        cur.close()
+        raise ValueError("This investigator is already assigned to the case.")
+
     cur.execute("""
         INSERT INTO assignment (case_id, user_id, status)
         VALUES (%s, %s, 'Assigned')

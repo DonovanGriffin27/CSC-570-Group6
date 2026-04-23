@@ -2,29 +2,31 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 
 const priorityColor = (p) =>
-  p === "High" ? "#ff4d4d" : p === "Medium" ? "#ffaa00" : "#00cc66";
+  p === "High" ? "#f87171" : p === "Medium" ? "#f59e0b" : "#34d399";
 
 const statusColor = (s) =>
-  s === "Closed" ? "#aaa" : s === "In Progress" ? "#00d4ff" : "#00cc66";
+  s === "Closed" ? "#8b9ab4" : s === "In Progress" ? "#60a5fa" : "#34d399";
 
 const eventTypeColor = (t) =>
-  t === "STATUS_CHANGE" ? "#ffaa00"
-  : t === "NOTE_ADDED" ? "#00d4ff"
-  : t === "EVIDENCE_ADDED" ? "#cc66ff"
-  : "#aaa";
+  t === "STATUS_CHANGE" ? "#f59e0b"
+  : t === "NOTE_ADDED" ? "#60a5fa"
+  : t === "EVIDENCE_ADDED" ? "#a78bfa"
+  : "#8b9ab4";
 
 function Section({ title, children, placeholder }) {
   return (
     <div style={{
-      background: "#1a1a2e", border: "1px solid #333",
-      borderRadius: "6px", padding: "20px", marginBottom: "16px"
+      background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+      borderRadius: "6px", padding: "18px 20px", marginBottom: "14px",
     }}>
-      <h3 style={{ margin: "0 0 14px 0", color: "#00d4ff", fontSize: "13px",
-        textTransform: "uppercase", letterSpacing: "0.08em" }}>
+      <h3 style={{
+        margin: "0 0 14px", fontSize: "11px", fontWeight: "600",
+        color: "var(--cv-text2)", textTransform: "uppercase", letterSpacing: "0.1em",
+      }}>
         {title}
       </h3>
       {placeholder
-        ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>{placeholder}</p>
+        ? <p style={{ color: "var(--cv-text3)", fontSize: "13px", margin: 0 }}>{placeholder}</p>
         : children}
     </div>
   );
@@ -32,9 +34,11 @@ function Section({ title, children, placeholder }) {
 
 function Field({ label, children }) {
   return (
-    <div style={{ marginBottom: "14px" }}>
-      <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px",
-        textTransform: "uppercase", letterSpacing: "0.06em" }}>
+    <div style={{ marginBottom: "12px" }}>
+      <div style={{
+        fontSize: "11px", color: "var(--cv-text3)", marginBottom: "4px",
+        textTransform: "uppercase", letterSpacing: "0.06em",
+      }}>
         {label}
       </div>
       {children}
@@ -42,34 +46,65 @@ function Field({ label, children }) {
   );
 }
 
-function CaseDetailPage({ caseId, onBack }) {
+function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
   const { user, token } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canEdit = isAdmin && ["SUPER_ADMIN", "ADMIN"].includes(user?.admin_level);
+  const canAssign = canEdit;
 
-  const [caseData, setCaseData]     = useState(null);
-  const [reports, setReports]       = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [notes, setNotes]           = useState([]);
-  const [timeline, setTimeline]     = useState([]);
-  const [auditLog, setAuditLog]     = useState([]);
+  const [caseData, setCaseData]         = useState(null);
+  const [reports, setReports]           = useState([]);
+  const [assignments, setAssignments]   = useState([]);
+  const [notes, setNotes]               = useState([]);
+  const [timeline, setTimeline]         = useState([]);
 
-  const [editing, setEditing]       = useState(false);
-  const [title, setTitle]           = useState("");
-  const [priority, setPriority]     = useState("");
-  const [status, setStatus]         = useState("");
-  const [saving, setSaving]         = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
+  const [expandedSection, setExpandedSection] = useState(null);
 
-  const [newNote, setNewNote]       = useState("");
+  const [editing, setEditing]           = useState(false);
+  const [title, setTitle]               = useState("");
+  const [priority, setPriority]         = useState("");
+  const [status, setStatus]             = useState("");
+  const [saving, setSaving]             = useState(false);
+  const [saveMessage, setSaveMessage]   = useState("");
+
+  const [newNote, setNewNote]           = useState("");
   const [submittingNote, setSubmittingNote] = useState(false);
-  const [noteMessage, setNoteMessage] = useState("");
+  const [noteMessage, setNoteMessage]   = useState("");
 
-  const authHeaders = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
+  const [investigators, setInvestigators] = useState([]);
+  const [showAssignForm, setShowAssignForm] = useState(false);
+  const [selectedInv, setSelectedInv]   = useState("");
+  const [assignMsg, setAssignMsg]       = useState("");
 
-  useEffect(() => { fetchAll(); }, [caseId]);
+  const authHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  useEffect(() => { fetchAll(); }, [caseId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!canAssign) return;
+    fetch("http://127.0.0.1:8000/admin/investigators", { headers: authHeaders })
+      .then((r) => r.ok ? r.json() : [])
+      .then(setInvestigators)
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!assignMsg) return;
+    const t = setTimeout(() => setAssignMsg(""), 4000);
+    return () => clearTimeout(t);
+  }, [assignMsg]);
+
+  useEffect(() => {
+    if (!saveMessage) return;
+    const t = setTimeout(() => setSaveMessage(""), 3000);
+    return () => clearTimeout(t);
+  }, [saveMessage]);
+
+  useEffect(() => {
+    if (!noteMessage) return;
+    const t = setTimeout(() => setNoteMessage(""), 4000);
+    return () => clearTimeout(t);
+  }, [noteMessage]);
 
   const fetchAll = async () => {
     const [caseRes, reportRes, assignRes] = await Promise.all([
@@ -77,28 +112,23 @@ function CaseDetailPage({ caseId, onBack }) {
       fetch(`http://127.0.0.1:8000/crime-reports/${caseId}`, { headers: authHeaders }),
       fetch(`http://127.0.0.1:8000/assignments/case/${caseId}`, { headers: authHeaders }),
     ]);
-
     const caseJson = await caseRes.json();
     setCaseData(caseJson);
     setTitle(caseJson.title || "");
     setPriority(caseJson.priority);
     setStatus(caseJson.status);
-
     if (reportRes.ok) setReports(await reportRes.json());
     if (assignRes.ok) setAssignments(await assignRes.json());
-
     await fetchMongo();
   };
 
   const fetchMongo = async () => {
-    const [notesRes, timelineRes, auditRes] = await Promise.all([
+    const [notesRes, timelineRes] = await Promise.all([
       fetch(`http://127.0.0.1:8000/notes/${caseId}`, { headers: authHeaders }),
       fetch(`http://127.0.0.1:8000/timeline/${caseId}`, { headers: authHeaders }),
-      fetch(`http://127.0.0.1:8000/audit/case/${caseId}`, { headers: authHeaders }),
     ]);
     if (notesRes.ok) setNotes(await notesRes.json());
     if (timelineRes.ok) setTimeline(await timelineRes.json());
-    if (auditRes.ok) setAuditLog(await auditRes.json());
   };
 
   const cancelEdit = () => {
@@ -111,8 +141,7 @@ function CaseDetailPage({ caseId, onBack }) {
   const saveChanges = async () => {
     setSaving(true);
     const res = await fetch(`http://127.0.0.1:8000/cases/${caseId}`, {
-      method: "PATCH",
-      headers: authHeaders,
+      method: "PATCH", headers: authHeaders,
       body: JSON.stringify({ title, priority, status }),
     });
     setSaving(false);
@@ -120,8 +149,8 @@ function CaseDetailPage({ caseId, onBack }) {
       setCaseData((prev) => ({ ...prev, title, priority, status }));
       setEditing(false);
       setSaveMessage("Changes saved.");
-      setTimeout(() => setSaveMessage(""), 3000);
       fetchMongo();
+      if (onCaseUpdated) onCaseUpdated();
     }
   };
 
@@ -129,15 +158,13 @@ function CaseDetailPage({ caseId, onBack }) {
     if (!newNote.trim()) return;
     setSubmittingNote(true);
     const res = await fetch(`http://127.0.0.1:8000/notes/${caseId}`, {
-      method: "POST",
-      headers: authHeaders,
+      method: "POST", headers: authHeaders,
       body: JSON.stringify({ note_text: newNote }),
     });
     setSubmittingNote(false);
     if (res.ok) {
       setNewNote("");
       setNoteMessage("Note saved.");
-      setTimeout(() => setNoteMessage(""), 3000);
       fetchMongo();
     } else {
       const data = await res.json();
@@ -145,58 +172,177 @@ function CaseDetailPage({ caseId, onBack }) {
     }
   };
 
-  if (!caseData) return <div style={{ color: "#aaa" }}>Loading...</div>;
-
-  const inputStyle = {
-    width: "100%", padding: "8px", borderRadius: "4px",
-    border: "1px solid #444", background: "#0f0f1a",
-    color: "white", fontSize: "13px", boxSizing: "border-box",
+  const submitAssign = async () => {
+    if (!selectedInv) return;
+    const res = await fetch(`http://127.0.0.1:8000/admin/cases/${caseId}/assign`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ user_id: parseInt(selectedInv) }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setAssignMsg("Investigator assigned.");
+      setShowAssignForm(false);
+      setSelectedInv("");
+      const assignRes = await fetch(`http://127.0.0.1:8000/assignments/case/${caseId}`, { headers: authHeaders });
+      if (assignRes.ok) setAssignments(await assignRes.json());
+      if (onCaseUpdated) onCaseUpdated();
+    } else {
+      setAssignMsg(`Error: ${data.detail || "Assignment failed."}`);
+    }
   };
 
+  if (!caseData) {
+    return (
+      <div style={{ padding: "40px 28px", color: "var(--cv-text3)", fontSize: "13px" }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // ── Expanded section full-page views ──────────────────────────────────
+  if (expandedSection) {
+    const sectionTitles = { notes: "Investigation Notes", timeline: "Timeline / Activity Feed" };
+    return (
+      <div style={{ padding: "24px 28px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px",
+          marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid var(--cv-border)" }}>
+          <button onClick={() => setExpandedSection(null)} className="cv-btn cv-btn-secondary" style={{ padding: "5px 12px", fontSize: "12px" }}>
+            ← Case Detail
+          </button>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--cv-text)" }}>
+              {sectionTitles[expandedSection]}
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginTop: "2px" }}>
+              {caseData.case_number} · {caseData.title || "Untitled"}
+            </div>
+          </div>
+        </div>
+
+        {/* Notes full view */}
+        {expandedSection === "notes" && (
+          <div>
+            <div style={{ marginBottom: "20px" }}>
+              <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Add a new investigation note..." rows={3}
+                className="cv-input" style={{ resize: "vertical", marginBottom: "8px" }} />
+              {noteMessage && (
+                <div style={{ color: noteMessage.startsWith("Error") ? "#f87171" : "#34d399",
+                  fontSize: "12px", marginBottom: "6px" }}>{noteMessage}</div>
+              )}
+              <button onClick={submitNote} disabled={submittingNote || !newNote.trim()}
+                className="cv-btn cv-btn-primary" style={{ padding: "6px 16px", fontSize: "12px" }}>
+                {submittingNote ? "Saving..." : "Add Note"}
+              </button>
+            </div>
+            <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginBottom: "12px" }}>
+              {notes.length} note{notes.length !== 1 ? "s" : ""} — newest first
+            </div>
+            {notes.map((n) => (
+              <div key={n._id} style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                borderRadius: "5px", padding: "14px 16px", marginBottom: "8px" }}>
+                <div style={{ color: "var(--cv-text)", fontSize: "13px", lineHeight: "1.6", marginBottom: "8px" }}>
+                  {n.note_text}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--cv-text3)" }}>
+                  {n.author_name} · {new Date(n.time_stamp).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Timeline full view */}
+        {expandedSection === "timeline" && (
+          <div>
+            <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginBottom: "12px" }}>
+              {timeline.length} event{timeline.length !== 1 ? "s" : ""} — newest first
+            </div>
+            {timeline.map((e) => (
+              <div key={e._id} style={{ display: "flex", alignItems: "flex-start", gap: "10px",
+                padding: "10px 14px", background: "var(--cv-surface)",
+                borderRadius: "5px", border: "1px solid var(--cv-border)", marginBottom: "6px" }}>
+                <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 7px", borderRadius: "3px",
+                  background: `${eventTypeColor(e.event_type)}18`, color: eventTypeColor(e.event_type),
+                  border: `1px solid ${eventTypeColor(e.event_type)}30`, whiteSpace: "nowrap", marginTop: "1px" }}>
+                  {e.event_type.replace("_", " ")}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "var(--cv-text2)", fontSize: "13px" }}>{e.description}</div>
+                  <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "3px" }}>
+                    {new Date(e.time_stamp).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "16px",
-        marginBottom: "20px", borderBottom: "1px solid #333", paddingBottom: "14px" }}>
-        <button
-          onClick={onBack}
-          style={{ padding: "6px 14px", background: "transparent", color: "#aaa",
-            border: "1px solid #444", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}
-        >
-          ← Back
-        </button>
-        <div>
-          <div style={{ fontSize: "20px", fontWeight: "bold" }}>{caseData.case_number}</div>
-          <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
+    <div style={{ padding: "24px 28px" }}>
+
+      {/* ── Header ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "14px",
+        marginBottom: "20px", paddingBottom: "16px",
+        borderBottom: "1px solid var(--cv-border)",
+      }}>
+        {onBack && (
+          <button onClick={onBack} className="cv-btn cv-btn-secondary" style={{ padding: "4px 10px", fontSize: "13px" }}>
+            ✕
+          </button>
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "18px", fontWeight: "700", color: "var(--cv-text)" }}>
+            {caseData.case_number}
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginTop: "2px" }}>
             Opened {new Date(caseData.date_opened).toLocaleDateString()}
             {caseData.date_closed && ` · Closed ${new Date(caseData.date_closed).toLocaleDateString()}`}
           </div>
         </div>
-        <span style={{ marginLeft: "auto", fontSize: "12px", fontWeight: "bold",
-          color: statusColor(caseData.status) }}>
-          {caseData.status}
-        </span>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <span style={{
+            fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "3px",
+            background: `${priorityColor(caseData.priority)}18`,
+            color: priorityColor(caseData.priority),
+            border: `1px solid ${priorityColor(caseData.priority)}40`,
+          }}>
+            {caseData.priority}
+          </span>
+          <span style={{
+            fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "3px",
+            background: `${statusColor(caseData.status)}18`,
+            color: statusColor(caseData.status),
+            border: `1px solid ${statusColor(caseData.status)}40`,
+          }}>
+            {caseData.status}
+          </span>
+        </div>
+        {saveMessage && (
+          <span style={{ fontSize: "12px", color: "#34d399" }}>{saveMessage}</span>
+        )}
       </div>
 
-      {/* Top 2-col */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+      {/* ── Top 2-col ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
 
         {/* Case Overview */}
         <div style={{
-          background: "#1a1a2e", border: "1px solid #333",
-          borderRadius: "6px", padding: "20px", marginBottom: "16px"
+          background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+          borderRadius: "6px", padding: "18px 20px", marginBottom: "14px",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <h3 style={{ margin: 0, color: "#00d4ff", fontSize: "13px",
-              textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              🗂 Case Overview
+            <h3 style={{ margin: 0, fontSize: "11px", fontWeight: "600",
+              color: "var(--cv-text2)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              Case Overview
             </h3>
-            {isAdmin && !editing && (
-              <button
-                onClick={() => setEditing(true)}
-                style={{ padding: "4px 12px", background: "transparent", color: "#00d4ff",
-                  border: "1px solid #00d4ff", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
-              >
+            {canEdit && !editing && (
+              <button onClick={() => setEditing(true)} className="cv-btn cv-btn-ghost" style={{ padding: "3px 10px", fontSize: "12px" }}>
                 Edit
               </button>
             )}
@@ -206,35 +352,27 @@ function CaseDetailPage({ caseId, onBack }) {
             <>
               <Field label="Title">
                 <input value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Untitled" style={inputStyle} />
+                  placeholder="Case title" className="cv-input" />
               </Field>
               <Field label="Priority">
-                <select value={priority} onChange={(e) => setPriority(e.target.value)} style={inputStyle}>
+                <select value={priority} onChange={(e) => setPriority(e.target.value)} className="cv-input">
                   <option>Low</option>
                   <option>Medium</option>
                   <option>High</option>
                 </select>
               </Field>
               <Field label="Status">
-                <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className="cv-input">
                   <option>Open</option>
                   <option value="In Progress">In Progress</option>
                   <option>Closed</option>
                 </select>
               </Field>
-              {saveMessage && (
-                <div style={{ color: "#00cc66", fontSize: "13px", marginBottom: "10px" }}>{saveMessage}</div>
-              )}
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={saveChanges} disabled={saving}
-                  style={{ padding: "8px 18px", background: "#00d4ff", color: "#0f0f1a",
-                    border: "none", borderRadius: "4px", cursor: "pointer",
-                    fontWeight: "bold", fontSize: "13px", opacity: saving ? 0.6 : 1 }}>
-                  {saving ? "Saving..." : "Save Changes"}
+              <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                <button onClick={saveChanges} disabled={saving} className="cv-btn cv-btn-primary" style={{ padding: "7px 16px" }}>
+                  {saving ? "Saving..." : "Save"}
                 </button>
-                <button onClick={cancelEdit} disabled={saving}
-                  style={{ padding: "8px 14px", background: "transparent", color: "#aaa",
-                    border: "1px solid #444", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>
+                <button onClick={cancelEdit} disabled={saving} className="cv-btn cv-btn-secondary" style={{ padding: "7px 12px" }}>
                   Cancel
                 </button>
               </div>
@@ -242,43 +380,40 @@ function CaseDetailPage({ caseId, onBack }) {
           ) : (
             <>
               <Field label="Title">
-                <div style={{ color: title ? "white" : "#555", fontSize: "13px" }}>
+                <div style={{ color: title ? "var(--cv-text)" : "var(--cv-text3)", fontSize: "13px" }}>
                   {title || "Untitled"}
                 </div>
               </Field>
               <Field label="Priority">
-                <div style={{ fontSize: "13px", fontWeight: "bold", color: priorityColor(caseData.priority) }}>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: priorityColor(caseData.priority) }}>
                   {caseData.priority}
                 </div>
               </Field>
               <Field label="Status">
-                <div style={{ fontSize: "13px", fontWeight: "bold", color: statusColor(caseData.status) }}>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: statusColor(caseData.status) }}>
                   {caseData.status}
                 </div>
               </Field>
-              {saveMessage && (
-                <div style={{ color: "#00cc66", fontSize: "13px" }}>{saveMessage}</div>
-              )}
             </>
           )}
         </div>
 
         {/* Crime Report */}
-        <Section title="📄 Crime Report">
+        <Section title="Crime Report">
           {reports.length === 0
-            ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No reports filed for this case.</p>
+            ? <p style={{ color: "var(--cv-text3)", fontSize: "13px", margin: 0 }}>No reports filed for this case.</p>
             : reports.map((r) => (
               <div key={r.report_id} style={{ marginBottom: "14px" }}>
                 <Field label="Type">
-                  <div style={{ color: "white", fontSize: "13px" }}>{r.report_type}</div>
+                  <div style={{ color: "var(--cv-text)", fontSize: "13px" }}>{r.report_type}</div>
                 </Field>
                 <Field label="Filed">
-                  <div style={{ color: "#aaa", fontSize: "13px" }}>
+                  <div style={{ color: "var(--cv-text2)", fontSize: "13px" }}>
                     {new Date(r.report_date).toLocaleString()}
                   </div>
                 </Field>
                 <Field label="Summary">
-                  <div style={{ color: "#aaa", fontSize: "13px", lineHeight: "1.5" }}>
+                  <div style={{ color: "var(--cv-text2)", fontSize: "13px", lineHeight: "1.6" }}>
                     {r.description}
                   </div>
                 </Field>
@@ -289,133 +424,183 @@ function CaseDetailPage({ caseId, onBack }) {
       </div>
 
       {/* Assigned Investigators */}
-      <Section title="👤 Assigned Investigators">
-        {assignments.length === 0
-          ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No investigators assigned.</p>
-          : <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {assignments.map((a) => (
-                <div key={a.assignment_id} style={{
-                  background: "#0f0f1a", border: "1px solid #333",
-                  borderRadius: "4px", padding: "8px 14px", fontSize: "13px"
-                }}>
-                  <span style={{ color: "white" }}>{a.first_name} {a.last_name}</span>
-                  <span style={{ color: "#555", marginLeft: "8px" }}>{a.status}</span>
-                </div>
-              ))}
-            </div>
-        }
+      <Section title="Assigned Investigators">
+        {assignments.length === 0 && !canAssign && (
+          <p style={{ color: "var(--cv-text3)", fontSize: "13px", margin: 0 }}>No investigators assigned.</p>
+        )}
+
+        {assignments.length > 0 && (
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: canAssign ? "12px" : 0 }}>
+            {assignments.map((a) => (
+              <div key={a.assignment_id} style={{
+                background: "var(--cv-raised)", border: "1px solid var(--cv-border)",
+                borderRadius: "4px", padding: "6px 12px", fontSize: "13px",
+              }}>
+                <span style={{ color: "var(--cv-text)" }}>{a.first_name} {a.last_name}</span>
+                <span style={{ color: "var(--cv-text3)", marginLeft: "8px", fontSize: "11px" }}>{a.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canAssign && (
+          <div>
+            {assignMsg && (
+              <div style={{
+                fontSize: "12px", marginBottom: "8px",
+                color: assignMsg.startsWith("Error") ? "#f87171" : "#34d399",
+              }}>
+                {assignMsg}
+              </div>
+            )}
+            {showAssignForm ? (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <select
+                  value={selectedInv}
+                  onChange={(e) => setSelectedInv(e.target.value)}
+                  className="cv-input"
+                  style={{ width: "auto", flex: 1 }}
+                >
+                  <option value="">Select investigator...</option>
+                  {investigators
+                    .filter((inv) => !assignments.some((a) => a.user_id === inv.user_id))
+                    .map((inv) => (
+                      <option key={inv.user_id} value={inv.user_id}>
+                        {inv.first_name} {inv.last_name} — {inv.rank}
+                      </option>
+                    ))}
+                </select>
+                <button onClick={submitAssign} disabled={!selectedInv}
+                  className="cv-btn cv-btn-success" style={{ padding: "6px 14px", fontSize: "12px" }}>
+                  Assign
+                </button>
+                <button onClick={() => { setShowAssignForm(false); setSelectedInv(""); }}
+                  className="cv-btn cv-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>
+                  Cancel
+                </button>
+              </div>
+            ) : investigators.filter((inv) => !assignments.some((a) => a.user_id === inv.user_id)).length > 0 ? (
+              <button onClick={() => setShowAssignForm(true)}
+                className="cv-btn cv-btn-ghost"
+                style={{ padding: "5px 14px", fontSize: "12px" }}>
+                + Add Investigator
+              </button>
+            ) : (
+              <span style={{ fontSize: "12px", color: "var(--cv-text3)" }}>All available investigators assigned</span>
+            )}
+          </div>
+        )}
       </Section>
 
-      {/* Placeholders — pending tables */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-        <Section title="👥 People Involved"
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+        <Section title="People Involved"
           placeholder="Suspects, victims, and witnesses — requires people tables in database." />
-        <Section title="📎 Evidence"
+        <Section title="Evidence"
           placeholder="Evidence intake and chain of custody — requires evidence queries." />
       </div>
 
-      {/* Investigation Notes — MongoDB */}
-      <Section title="📝 Investigation Notes">
+      {/* Investigation Notes */}
+      <Section title="Investigation Notes">
         <div style={{ marginBottom: "14px" }}>
           <textarea
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             placeholder="Add a new investigation note..."
             rows={3}
-            style={{ ...inputStyle, resize: "vertical", marginBottom: "8px" }}
+            className="cv-input"
+            style={{ resize: "vertical", marginBottom: "8px" }}
           />
           {noteMessage && (
-            <div style={{ color: noteMessage.startsWith("Error") ? "#ff4d4d" : "#00cc66",
-              fontSize: "12px", marginBottom: "6px" }}>{noteMessage}</div>
+            <div style={{
+              color: noteMessage.startsWith("Error") ? "#f87171" : "#34d399",
+              fontSize: "12px", marginBottom: "6px",
+            }}>
+              {noteMessage}
+            </div>
           )}
           <button
             onClick={submitNote}
             disabled={submittingNote || !newNote.trim()}
-            style={{ padding: "7px 16px", background: "#00d4ff", color: "#0f0f1a",
-              border: "none", borderRadius: "4px", cursor: "pointer",
-              fontWeight: "bold", fontSize: "13px",
-              opacity: submittingNote || !newNote.trim() ? 0.5 : 1 }}>
+            className="cv-btn cv-btn-primary"
+            style={{ padding: "6px 16px", fontSize: "12px" }}
+          >
             {submittingNote ? "Saving..." : "Add Note"}
           </button>
         </div>
 
         {notes.length === 0
-          ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No notes yet.</p>
-          : <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {notes.map((n) => (
-                <div key={n._id} style={{
-                  background: "#0f0f1a", border: "1px solid #2a2a3e",
-                  borderRadius: "4px", padding: "12px"
-                }}>
-                  <div style={{ color: "white", fontSize: "13px", lineHeight: "1.6", marginBottom: "6px" }}>
-                    {n.note_text}
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#555" }}>
-                    {n.author_name} · {new Date(n.time_stamp).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-        }
-      </Section>
-
-      {/* Court placeholder */}
-      <Section title="📅 Court / Legal Info"
-        placeholder="Court dates and charges — requires court tables in database." />
-
-      {/* Timeline — MongoDB */}
-      <Section title="🔄 Timeline / Activity Feed">
-        {timeline.length === 0
-          ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No activity yet.</p>
-          : <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {timeline.map((e) => (
-                <div key={e._id} style={{
-                  display: "flex", alignItems: "flex-start", gap: "12px",
-                  padding: "10px", background: "#0f0f1a",
-                  borderRadius: "4px", border: "1px solid #2a2a3e"
-                }}>
-                  <span style={{
-                    fontSize: "10px", fontWeight: "bold", padding: "2px 7px",
-                    borderRadius: "3px", background: eventTypeColor(e.event_type) + "22",
-                    color: eventTypeColor(e.event_type), whiteSpace: "nowrap", marginTop: "1px"
+          ? <p style={{ color: "var(--cv-text3)", fontSize: "13px", margin: 0 }}>No notes yet.</p>
+          : <>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {notes.slice(0, 3).map((n) => (
+                  <div key={n._id} style={{
+                    background: "var(--cv-raised)", border: "1px solid var(--cv-border)",
+                    borderRadius: "4px", padding: "12px",
                   }}>
-                    {e.event_type.replace("_", " ")}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: "#ccc", fontSize: "13px" }}>{e.description}</div>
-                    <div style={{ color: "#555", fontSize: "11px", marginTop: "3px" }}>
-                      {new Date(e.time_stamp).toLocaleString()}
+                    <div style={{ color: "var(--cv-text)", fontSize: "13px", lineHeight: "1.6", marginBottom: "6px" }}>
+                      {n.note_text}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--cv-text3)" }}>
+                      {n.author_name} · {new Date(n.time_stamp).toLocaleString()}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              {notes.length > 3 && (
+                <button onClick={() => setExpandedSection("notes")}
+                  className="cv-btn cv-btn-ghost"
+                  style={{ marginTop: "10px", padding: "5px 14px", fontSize: "12px" }}>
+                  Show all {notes.length} notes
+                </button>
+              )}
+            </>
         }
       </Section>
 
-      {/* Audit Log — MongoDB */}
-      <Section title="🔐 Audit Log">
-        {auditLog.length === 0
-          ? <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No audit events for this case.</p>
-          : <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {auditLog.map((a) => (
-                <div key={a._id} style={{
-                  display: "flex", alignItems: "center", gap: "12px",
-                  padding: "8px 10px", background: "#0f0f1a",
-                  borderRadius: "4px", borderLeft: "2px solid #333", fontSize: "12px"
-                }}>
-                  <span style={{ color: "#00d4ff", fontWeight: "bold", minWidth: "110px" }}>
-                    {a.action_type}
-                  </span>
-                  <span style={{ color: "#aaa", flex: 1 }}>{a.description}</span>
-                  <span style={{ color: "#555", whiteSpace: "nowrap" }}>
-                    {a.user_name} · {new Date(a.time_stamp).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
+      <Section title="Court / Legal Info"
+        placeholder="Court dates and charges — requires court tables in database." />
+
+      {/* Timeline */}
+      <Section title="Timeline / Activity Feed">
+        {timeline.length === 0
+          ? <p style={{ color: "var(--cv-text3)", fontSize: "13px", margin: 0 }}>No activity yet.</p>
+          : <>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {timeline.slice(0, 3).map((e) => (
+                  <div key={e._id} style={{
+                    display: "flex", alignItems: "flex-start", gap: "10px",
+                    padding: "9px 12px", background: "var(--cv-raised)",
+                    borderRadius: "4px", border: "1px solid var(--cv-border)",
+                  }}>
+                    <span style={{
+                      fontSize: "10px", fontWeight: "600", padding: "2px 7px", borderRadius: "3px",
+                      background: `${eventTypeColor(e.event_type)}18`,
+                      color: eventTypeColor(e.event_type),
+                      border: `1px solid ${eventTypeColor(e.event_type)}30`,
+                      whiteSpace: "nowrap", marginTop: "1px",
+                    }}>
+                      {e.event_type.replace("_", " ")}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: "var(--cv-text2)", fontSize: "13px" }}>{e.description}</div>
+                      <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "3px" }}>
+                        {new Date(e.time_stamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {timeline.length > 3 && (
+                <button onClick={() => setExpandedSection("timeline")}
+                  className="cv-btn cv-btn-ghost"
+                  style={{ marginTop: "10px", padding: "5px 14px", fontSize: "12px" }}>
+                  Show all {timeline.length} events
+                </button>
+              )}
+            </>
         }
       </Section>
+
     </div>
   );
 }

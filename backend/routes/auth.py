@@ -12,6 +12,8 @@ from db.queries.user_queries import (
     approve_account_request,
     deny_account_request,
 )
+from db.mongo_connection import get_mongo_db
+from db.queries.mongo_queries import log_audit_event
 from services.auth_service import hash_password, verify_password, create_token
 from middleware.auth_middleware import get_current_user, require_admin
 
@@ -124,12 +126,20 @@ def create_department(body: DepartmentCreate, admin=Depends(require_admin)):
             )
             dept_id = cur.fetchone()[0]
         conn.commit()
-        return {"department_id": dept_id, "name": body.name}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+    admin_name = admin.get("name", f"User {admin['user_id']}")
+    db = get_mongo_db()
+    log_audit_event(
+        db, admin["user_id"], "DEPARTMENT_CREATED",
+        f"{admin_name} created department '{body.name}' ({body.department_type})",
+        user_name=admin_name,
+    )
+    return {"department_id": dept_id, "name": body.name}
 
 
 @router.post("/auth/request-account", status_code=201)
@@ -205,12 +215,22 @@ def review_account_request(
 
     conn = get_connection()
     try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT first_name, last_name, contact_email FROM account_request WHERE request_id = %s",
+                (request_id,),
+            )
+            req_row = cur.fetchone()
+        applicant = f"{req_row[0]} {req_row[1]} ({req_row[2]})" if req_row else f"Request #{request_id}"
+
         if body.action == "approve":
             new_user_id = approve_account_request(conn, request_id, admin["user_id"])
-            return {"message": "Account approved.", "user_id": new_user_id}
+            result = {"message": "Account approved.", "user_id": new_user_id}
+            action_type = "ACCOUNT_APPROVED"
         else:
             deny_account_request(conn, request_id, admin["user_id"])
-            return {"message": "Account request denied."}
+            result = {"message": "Account request denied."}
+            action_type = "ACCOUNT_DENIED"
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -219,9 +239,30 @@ def review_account_request(
     finally:
         conn.close()
 
+    admin_name = admin.get("name", f"User {admin['user_id']}")
+    db = get_mongo_db()
+    log_audit_event(
+        db, admin["user_id"], action_type,
+        f"{admin_name} {'approved' if body.action == 'approve' else 'denied'} account request for {applicant}",
+        user_name=admin_name,
+    )
+    return result
+
 
 # Current user info  (token refresh / me)
 
 @router.get("/auth/me")
 def me(user=Depends(get_current_user)):
     return user
+
+
+@router.post("/auth/logout")
+def logout(current_user=Depends(get_current_user)):
+    name = current_user.get("name", f"User {current_user['user_id']}")
+    db = get_mongo_db()
+    log_audit_event(
+        db, current_user["user_id"], "USER_LOGOUT",
+        f"{name} signed out",
+        user_name=name,
+    )
+    return {"message": "Logged out"}

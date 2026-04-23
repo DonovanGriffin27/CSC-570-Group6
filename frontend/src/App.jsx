@@ -38,7 +38,7 @@ function AppShell() {
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      <div style={{ flex: 1, padding: "30px", background: "#0f0f1a", color: "white", overflowY: "auto" }}>
+      <div style={{ flex: 1, background: "var(--cv-base)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {renderPage()}
       </div>
     </div>

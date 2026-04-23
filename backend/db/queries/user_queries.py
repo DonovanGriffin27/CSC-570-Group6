@@ -72,15 +72,17 @@ def get_all_investigators(conn, department_id=None) -> list:
 def get_all_admins(conn) -> list:
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT u.user_id, u.first_name, u.last_name, u.contact_email, a.admin_level
+            SELECT u.user_id, u.first_name, u.last_name, u.contact_email,
+                   a.admin_level, d.name AS department_name
             FROM users u
             JOIN admin a ON u.user_id = a.user_id
+            LEFT JOIN department d ON u.department_id = d.department_id
             ORDER BY a.admin_level, u.last_name
         """)
         rows = cur.fetchall()
     return [
         {"user_id": r[0], "first_name": r[1], "last_name": r[2],
-         "email": r[3], "admin_level": r[4]}
+         "email": r[3], "admin_level": r[4], "department_name": r[5]}
         for r in rows
     ]
 

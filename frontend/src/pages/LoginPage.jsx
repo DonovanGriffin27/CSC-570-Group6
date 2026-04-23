@@ -12,7 +12,6 @@ function LoginPage({ onRequestAccount }) {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       const res = await fetch("http://127.0.0.1:8000/auth/login", {
         method: "POST",
@@ -20,12 +19,7 @@ function LoginPage({ onRequestAccount }) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.detail || "Login failed.");
-        return;
-      }
-
+      if (!res.ok) { setError(data.detail || "Login failed."); return; }
       login(data.access_token, data.user);
     } catch {
       setError("Could not reach the server. Make sure the backend is running.");
@@ -35,108 +29,151 @@ function LoginPage({ onRequestAccount }) {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0f0f1a",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+
+      {/* ── Left branding panel ── */}
       <div style={{
-        background: "#1a1a2e",
-        border: "1px solid #333",
-        borderRadius: "8px",
-        padding: "40px",
-        width: "100%",
-        maxWidth: "400px",
+        width: "42%", flexShrink: 0,
+        background: "var(--cv-surface)",
+        borderRight: "1px solid var(--cv-border)",
+        display: "flex", flexDirection: "column",
+        justifyContent: "space-between",
+        padding: "48px 52px",
+        backgroundImage: "radial-gradient(circle, rgba(59,130,246,0.12) 1px, transparent 1px)",
+        backgroundSize: "28px 28px",
       }}>
-        {/* Logo / title */}
-        <div style={{ textAlign: "center", marginBottom: "32px" }}>
-          <div style={{ fontSize: "28px", fontWeight: "bold", color: "white" }}>CaseVault</div>
-          <div style={{ fontSize: "13px", color: "#555", marginTop: "4px" }}>
-            Digital Crime Investigation System
+        <div>
+          <div style={{
+            fontSize: "22px", fontWeight: "700", letterSpacing: "0.1em",
+            color: "var(--cv-text)", textTransform: "uppercase",
+          }}>
+            CaseVault
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginTop: "4px", letterSpacing: "0.04em" }}>
+            Case Management System
           </div>
         </div>
 
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div>
-            <label style={{ fontSize: "11px", color: "#666", textTransform: "uppercase",
-              letterSpacing: "0.06em", display: "block", marginBottom: "6px" }}>
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoFocus
-              style={inputStyle}
-            />
+        <div>
+          <div style={{
+            fontSize: "28px", fontWeight: "700", color: "var(--cv-text)",
+            lineHeight: "1.25", marginBottom: "16px",
+          }}>
+            Centralized case<br />management for<br />law enforcement
           </div>
-
-          <div>
-            <label style={{ fontSize: "11px", color: "#666", textTransform: "uppercase",
-              letterSpacing: "0.06em", display: "block", marginBottom: "6px" }}>
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={inputStyle}
-            />
+          <div style={{ fontSize: "13px", color: "var(--cv-text2)", lineHeight: "1.6", maxWidth: "320px" }}>
+            Secure, role-based access to case files, evidence records,
+            investigation notes, and audit trails.
           </div>
+        </div>
 
-          {error && (
-            <div style={{ color: "#ff4d4d", fontSize: "13px", textAlign: "center" }}>
-              {error}
+        <div style={{
+          padding: "12px 16px",
+          background: "rgba(248,113,113,0.07)",
+          border: "1px solid rgba(248,113,113,0.2)",
+          borderRadius: "5px",
+        }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", color: "#f87171",
+            textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
+            Authorized Personnel Only
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--cv-text3)", lineHeight: "1.5" }}>
+            Unauthorized access is prohibited and subject to prosecution under applicable law.
+          </div>
+        </div>
+      </div>
+
+      {/* ── Right form panel ── */}
+      <div style={{
+        flex: 1, background: "var(--cv-base)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "40px",
+      }}>
+        <div style={{ width: "100%", maxWidth: "360px" }}>
+          <div style={{ marginBottom: "32px" }}>
+            <h1 style={{ margin: "0 0 6px", fontSize: "22px", fontWeight: "700", color: "var(--cv-text)" }}>
+              Sign In
+            </h1>
+            <div style={{ fontSize: "13px", color: "var(--cv-text3)" }}>
+              Enter your credentials to access the system
             </div>
-          )}
+          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              marginTop: "6px",
-              padding: "10px",
-              background: "#00d4ff",
-              color: "#0f0f1a",
-              border: "none",
-              borderRadius: "4px",
-              cursor: loading ? "not-allowed" : "pointer",
-              fontWeight: "bold",
-              fontSize: "14px",
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div>
+              <label style={labelStyle}>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+                className="cv-input"
+                placeholder="name@department.gov"
+              />
+            </div>
 
-        <div style={{ marginTop: "24px", textAlign: "center", borderTop: "1px solid #2a2a3e", paddingTop: "20px" }}>
-          <span style={{ color: "#666", fontSize: "13px" }}>Don&apos;t have an account? </span>
-          <span
-            onClick={onRequestAccount}
-            style={{ color: "#00d4ff", fontSize: "13px", cursor: "pointer", textDecoration: "underline" }}
-          >
-            Request Access
-          </span>
+            <div>
+              <label style={labelStyle}>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="cv-input"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                padding: "9px 12px", borderRadius: "4px",
+                background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.3)",
+                color: "#f87171", fontSize: "13px",
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="cv-btn cv-btn-primary"
+              style={{ padding: "10px", fontSize: "14px", marginTop: "4px" }}
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          <div style={{
+            marginTop: "28px", paddingTop: "20px",
+            borderTop: "1px solid var(--cv-border)",
+            textAlign: "center",
+          }}>
+            <span style={{ color: "var(--cv-text3)", fontSize: "13px" }}>
+              Need access?{" "}
+            </span>
+            <span
+              onClick={onRequestAccount}
+              style={{ color: "var(--cv-blue-l)", fontSize: "13px", cursor: "pointer" }}
+            >
+              Request an Account
+            </span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-const inputStyle = {
-  width: "100%",
-  padding: "9px 10px",
-  borderRadius: "4px",
-  border: "1px solid #444",
-  background: "#0f0f1a",
-  color: "white",
-  fontSize: "14px",
-  boxSizing: "border-box",
+const labelStyle = {
+  display: "block",
+  fontSize: "11px",
+  fontWeight: "600",
+  color: "var(--cv-text2)",
+  textTransform: "uppercase",
+  letterSpacing: "0.07em",
+  marginBottom: "6px",
 };
 
 export default LoginPage;

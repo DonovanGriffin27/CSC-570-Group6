@@ -46,16 +46,26 @@ def update_case_route(case_id: int, body: CaseUpdate, current_user=Depends(get_c
     conn.close()
 
     name = current_user.get("name", f"User {current_user['user_id']}")
+    case_number = case.get("case_number", str(case_id))
     db = get_mongo_db()
-    if body.status and body.status != case.get("status"):
+
+    changes = []
+    if body.title is not None and body.title != case.get("title"):
+        changes.append(f"title to '{body.title}'")
+    if body.priority is not None and body.priority != case.get("priority"):
+        changes.append(f"priority to {body.priority.value}")
+    if body.status is not None and body.status != case.get("status"):
+        changes.append(f"status to {body.status.value}")
         add_timeline_event(
             db, case_id, "STATUS_CHANGE", current_user["user_id"],
-            f"Status changed to {body.status} by {name}",
+            f"Status changed to {body.status.value} by {name}",
             created_by_name=name,
         )
+
+    change_desc = f"changed {', '.join(changes)}" if changes else "updated (no changes)"
     log_audit_event(
         db, current_user["user_id"], "CASE_UPDATED",
-        f"{name} updated case {case_id}",
+        f"{name} {change_desc} on case {case_number}",
         case_id=case_id, user_name=name,
     )
 

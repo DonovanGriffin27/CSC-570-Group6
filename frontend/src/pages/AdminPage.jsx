@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import CaseDetailPage from "./CaseDetailPage";
 
 const priorityColor = (p) =>
-  p === "High" ? "#ff4d4d" : p === "Medium" ? "#ffaa00" : "#00cc66";
+  p === "High" ? "#f87171" : p === "Medium" ? "#f59e0b" : "#34d399";
 
 const statusColor = (s) =>
-  s === "Closed" ? "#aaa" : s === "In Progress" ? "#00d4ff" : "#00cc66";
+  s === "Closed" ? "#8b9ab4" : s === "In Progress" ? "#60a5fa" : "#34d399";
 
 const reqStatusColor = (s) =>
-  s === "Approved" ? "#00cc66" : s === "Denied" ? "#ff4d4d" : "#ffaa00";
+  s === "Approved" ? "#34d399" : s === "Denied" ? "#f87171" : "#f59e0b";
 
 const levelColor = (l) =>
-  l === "SUPER_ADMIN" ? "#ff4d4d"
-  : l === "ADMIN" ? "#00d4ff"
-  : l === "SUPERVISOR" ? "#ffaa00"
-  : "#aaa";
+  l === "SUPER_ADMIN" ? "#f87171"
+  : l === "ADMIN" ? "#60a5fa"
+  : l === "SUPERVISOR" ? "#f59e0b"
+  : "#8b9ab4";
 
 const DEPT_TYPES = [
   "Homicide", "Narcotics", "Cyber Crimes", "Financial Crimes",
@@ -22,9 +23,7 @@ const DEPT_TYPES = [
 ];
 
 const ADMIN_LEVELS = ["SUPER_ADMIN", "ADMIN", "SUPERVISOR", "VIEWER"];
-
-// ── nav tabs ──────────────────────────────────────────────────────────────────
-const TABS = ["Cases", "Account Requests", "Departments", "Admin Management"];
+const TABS = ["Cases", "Account Requests", "Departments", "Audit Log", "Admin Management"];
 
 function AdminPage() {
   const { user, token } = useAuth();
@@ -36,49 +35,49 @@ function AdminPage() {
   const authH = { Authorization: `Bearer ${token}` };
   const jsonH = { "Content-Type": "application/json", ...authH };
 
-  // ── Cases state ──────────────────────────────────────────────────────────
-  const [cases, setCases]               = useState([]);
-  const [investigators, setInvestigators] = useState([]);
-  const [assignTarget, setAssignTarget] = useState(null); // case_id being assigned
-  const [selectedInv, setSelectedInv]   = useState("");
-  const [caseMsg, setCaseMsg]           = useState("");
+  const [selectedCaseId, setSelectedCaseId] = useState(null);
 
-  // ── Account requests state ────────────────────────────────────────────────
-  const [requests, setRequests]   = useState([]);
-  const [reqFilter, setReqFilter] = useState("Pending");
+  const [cases, setCases] = useState([]);
+
+  const [requests, setRequests]     = useState([]);
+  const [reqFilter, setReqFilter]   = useState("Pending");
   const [reqLoading, setReqLoading] = useState(true);
   const [reqMessage, setReqMessage] = useState("");
 
-  // ── Departments state ─────────────────────────────────────────────────────
   const [departments, setDepartments]   = useState([]);
   const [showDeptForm, setShowDeptForm] = useState(false);
   const [deptForm, setDeptForm]         = useState({ name: "", department_type: "", contact_email: "", contact_phone: "" });
   const [deptMessage, setDeptMessage]   = useState("");
 
-  // ── Admin management state ────────────────────────────────────────────────
-  const [admins, setAdmins]           = useState([]);
+  const [admins, setAdmins]             = useState([]);
   const [levelChanges, setLevelChanges] = useState({});
   const [adminMsg, setAdminMsg]         = useState("");
 
-  // ── Initial loads ─────────────────────────────────────────────────────────
+  const [auditLog, setAuditLog]         = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [selectedAuditUser, setSelectedAuditUser] = useState(null);
+
   useEffect(() => {
     fetchCases();
-    fetchInvestigators();
     fetchDepartments();
     if (isSuperAdmin) fetchAdmins();
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchRequests(); }, [reqFilter]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeTab !== "Audit Log") {
+      setSelectedAuditUser(null);
+      return;
+    }
+    fetchAuditLog();
+    const interval = setInterval(fetchAuditLog, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetchers ──────────────────────────────────────────────────────────────
+  useEffect(() => { fetchRequests(); }, [reqFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchCases = async () => {
     const res = await fetch("http://127.0.0.1:8000/admin/cases", { headers: authH });
     if (res.ok) setCases(await res.json());
-  };
-
-  const fetchInvestigators = async () => {
-    const res = await fetch("http://127.0.0.1:8000/admin/investigators", { headers: authH });
-    if (res.ok) setInvestigators(await res.json());
   };
 
   const fetchRequests = async () => {
@@ -101,52 +100,30 @@ function AdminPage() {
     if (res.ok) setAdmins(await res.json());
   };
 
-  // ── Case actions ──────────────────────────────────────────────────────────
-  const submitAssign = async (caseId) => {
-    if (!selectedInv) return;
-    const res = await fetch(`http://127.0.0.1:8000/admin/cases/${caseId}/assign`, {
-      method: "POST",
-      headers: jsonH,
-      body: JSON.stringify({ user_id: parseInt(selectedInv) }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setCaseMsg("Investigator assigned successfully.");
-      setAssignTarget(null);
-      setSelectedInv("");
-      fetchCases();
-    } else {
-      setCaseMsg(`Error: ${data.detail || "Assignment failed."}`);
-    }
-    setTimeout(() => setCaseMsg(""), 4000);
+  const fetchAuditLog = async () => {
+    setAuditLoading(true);
+    const res = await fetch("http://127.0.0.1:8000/admin/audit", { headers: authH });
+    if (res.ok) setAuditLog(await res.json());
+    setAuditLoading(false);
   };
 
-  // ── Account request actions ───────────────────────────────────────────────
   const decide = async (requestId, action) => {
     const res = await fetch(`http://127.0.0.1:8000/admin/account-requests/${requestId}`, {
-      method: "PATCH",
-      headers: jsonH,
+      method: "PATCH", headers: jsonH,
       body: JSON.stringify({ action }),
     });
     const data = await res.json();
-    if (res.ok) {
-      setReqMessage(data.message);
-      fetchRequests();
-    } else {
-      setReqMessage(`Error: ${data.detail}`);
-    }
+    if (res.ok) { setReqMessage(data.message); fetchRequests(); }
+    else setReqMessage(`Error: ${data.detail}`);
     setTimeout(() => setReqMessage(""), 5000);
   };
 
-  // ── Department actions ────────────────────────────────────────────────────
   const setDept = (field) => (e) => setDeptForm((p) => ({ ...p, [field]: e.target.value }));
 
   const submitDepartment = async (e) => {
     e.preventDefault();
     const res = await fetch("http://127.0.0.1:8000/departments", {
-      method: "POST",
-      headers: jsonH,
-      body: JSON.stringify(deptForm),
+      method: "POST", headers: jsonH, body: JSON.stringify(deptForm),
     });
     const data = await res.json();
     if (res.ok) {
@@ -160,13 +137,11 @@ function AdminPage() {
     setTimeout(() => setDeptMessage(""), 4000);
   };
 
-  // ── Admin level actions ───────────────────────────────────────────────────
   const submitLevelChange = async (userId) => {
     const newLevel = levelChanges[userId];
     if (!newLevel) return;
     const res = await fetch(`http://127.0.0.1:8000/admin/admins/${userId}/level`, {
-      method: "PATCH",
-      headers: jsonH,
+      method: "PATCH", headers: jsonH,
       body: JSON.stringify({ admin_level: newLevel }),
     });
     const data = await res.json();
@@ -180,125 +155,150 @@ function AdminPage() {
     setTimeout(() => setAdminMsg(""), 4000);
   };
 
+  if (selectedCaseId) {
+    return (
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* Left: compact case list */}
+        <div style={{
+          width: "380px", flexShrink: 0, display: "flex", flexDirection: "column",
+          background: "var(--cv-surface)", borderRight: "1px solid var(--cv-border)",
+        }}>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--cv-border)", flexShrink: 0 }}>
+            <button
+              onClick={() => setSelectedCaseId(null)}
+              className="cv-btn cv-btn-secondary"
+              style={{ padding: "5px 12px", fontSize: "12px", width: "100%" }}
+            >
+              ← Back to Cases
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            {cases.map((c) => (
+              <div
+                key={c.case_id}
+                onClick={() => setSelectedCaseId(c.case_id)}
+                className={`cv-row${selectedCaseId === c.case_id ? " cv-row-selected" : ""}`}
+                style={{
+                  padding: "11px 16px",
+                  borderLeft: `3px solid ${priorityColor(c.priority)}`,
+                  borderBottom: "1px solid var(--cv-border)",
+                  background: selectedCaseId === c.case_id ? "var(--cv-blue-bg)" : "transparent",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: "600", fontSize: "13px", color: "var(--cv-text)" }}>
+                      {c.case_number}
+                    </div>
+                    <div style={{
+                      fontSize: "12px", color: "var(--cv-text2)", marginTop: "2px",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "240px",
+                    }}>
+                      {c.title || "Untitled"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0, paddingLeft: "8px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: "600", color: priorityColor(c.priority) }}>
+                      {c.priority}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--cv-text3)", marginTop: "2px" }}>
+                      {new Date(c.date_opened).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: case detail */}
+        <div style={{ flex: 1, overflow: "hidden", background: "var(--cv-base)" }}>
+          <div style={{ height: "100%", overflowY: "auto" }}>
+            <CaseDetailPage key={selectedCaseId} caseId={selectedCaseId} onCaseUpdated={fetchCases} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <h1 style={{ marginBottom: "20px", borderBottom: "1px solid #333", paddingBottom: "10px" }}>
-        Admin Portal
-      </h1>
+    <div style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
+
+      <div style={{ marginBottom: "20px" }}>
+        <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "var(--cv-text)" }}>
+          Admin Portal
+        </h1>
+        <div style={{ fontSize: "12px", color: "var(--cv-text3)", marginTop: "4px" }}>
+          {isSuperAdmin ? "Super Admin — full system access" : `${user?.admin_level} — department-scoped access`}
+        </div>
+      </div>
 
       {/* Tab nav */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "24px", borderBottom: "1px solid #222", paddingBottom: "0" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--cv-border)", marginBottom: "24px" }}>
         {visibleTabs.map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: "8px 18px", background: "transparent", border: "none",
-            borderBottom: activeTab === t ? "2px solid #00d4ff" : "2px solid transparent",
-            color: activeTab === t ? "#00d4ff" : "#666",
-            cursor: "pointer", fontWeight: activeTab === t ? "bold" : "normal",
-            fontSize: "13px", marginBottom: "-1px",
-          }}>
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`cv-tab${activeTab === t ? " active" : ""}`}
+          >
             {t}
           </button>
         ))}
       </div>
 
-      {/* ══════════ CASES TAB ══════════ */}
+      {/* ══ CASES TAB ══ */}
       {activeTab === "Cases" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <h2 style={{ margin: 0 }}>All Cases</h2>
-            {caseMsg && (
-              <span style={{ fontSize: "13px", color: caseMsg.startsWith("Error") ? "#ff4d4d" : "#00cc66" }}>
-                {caseMsg}
-              </span>
-            )}
+          <div style={{ marginBottom: "14px" }}>
+            <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>
+              All Cases
+            </span>
+            <span style={{ fontSize: "12px", color: "var(--cv-text3)", marginLeft: "10px" }}>
+              Click a case to view details and assign investigators
+            </span>
           </div>
 
           {cases.length === 0 ? (
-            <p style={{ color: "#555", fontSize: "13px" }}>No cases found.</p>
+            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No cases found.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {cases.map((c) => (
-                <div key={c.case_id} style={{
-                  background: "#1a1a2e", border: `1px solid ${priorityColor(c.priority)}22`,
-                  borderLeft: `3px solid ${priorityColor(c.priority)}`,
-                  borderRadius: "6px", padding: "14px 18px",
-                }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "140px 1fr 120px 160px 180px auto", alignItems: "center", gap: "16px" }}>
-                    {/* Case number */}
+                <div key={c.case_id}
+                  onClick={() => setSelectedCaseId(c.case_id)}
+                  style={{
+                    background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                    borderLeft: `3px solid ${priorityColor(c.priority)}`,
+                    borderRadius: "5px", padding: "12px 16px", cursor: "pointer",
+                    transition: "background 0.1s",
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--cv-raised)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "var(--cv-surface)"}
+                >
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "130px 1fr 90px 120px 160px",
+                    alignItems: "center", gap: "16px",
+                  }}>
                     <div>
-                      <div style={{ fontWeight: "bold", color: "white", fontSize: "13px" }}>{c.case_number}</div>
-                      <div style={{ color: "#555", fontSize: "11px", marginTop: "2px" }}>
+                      <div style={{ fontWeight: "600", color: "var(--cv-text)", fontSize: "13px" }}>{c.case_number}</div>
+                      <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "2px" }}>
                         {new Date(c.date_opened).toLocaleDateString()}
                       </div>
                     </div>
-
-                    {/* Title / report type */}
                     <div>
-                      <div style={{ color: "white", fontSize: "13px" }}>{c.title || "Untitled"}</div>
+                      <div style={{ color: "var(--cv-text)", fontSize: "13px" }}>{c.title || "Untitled"}</div>
                       {c.report_type && (
-                        <div style={{ color: "#aaa", fontSize: "11px", marginTop: "2px" }}>{c.report_type}</div>
+                        <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "2px" }}>{c.report_type}</div>
                       )}
                     </div>
-
-                    {/* Priority */}
-                    <div style={{ fontSize: "12px", fontWeight: "bold", color: priorityColor(c.priority) }}>
+                    <div style={{ fontSize: "12px", fontWeight: "600", color: priorityColor(c.priority) }}>
                       {c.priority}
                     </div>
-
-                    {/* Status */}
-                    <div style={{ fontSize: "12px", fontWeight: "bold", color: statusColor(c.status) }}>
+                    <div style={{ fontSize: "12px", fontWeight: "600", color: statusColor(c.status) }}>
                       {c.status}
                     </div>
-
-                    {/* Assigned to */}
-                    <div style={{ fontSize: "12px", color: c.assigned_to === "Unassigned" ? "#555" : "#aaa" }}>
+                    <div style={{ fontSize: "12px", color: c.assigned_to === "Unassigned" ? "var(--cv-text3)" : "var(--cv-text2)" }}>
                       {c.assigned_to}
-                    </div>
-
-                    {/* Assign button / inline selector */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      {assignTarget === c.case_id ? (
-                        <>
-                          <select
-                            value={selectedInv}
-                            onChange={(e) => setSelectedInv(e.target.value)}
-                            style={{ padding: "5px 8px", borderRadius: "4px", border: "1px solid #444",
-                              background: "#0f0f1a", color: "white", fontSize: "12px" }}
-                          >
-                            <option value="">Pick investigator...</option>
-                            {investigators.map((inv) => (
-                              <option key={inv.user_id} value={inv.user_id}>
-                                {inv.first_name} {inv.last_name} ({inv.rank})
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => submitAssign(c.case_id)}
-                            disabled={!selectedInv}
-                            style={{ padding: "5px 10px", background: "#00cc66", color: "#0f0f1a",
-                              border: "none", borderRadius: "4px", cursor: "pointer",
-                              fontWeight: "bold", fontSize: "12px", opacity: selectedInv ? 1 : 0.5 }}
-                          >
-                            Assign
-                          </button>
-                          <button
-                            onClick={() => { setAssignTarget(null); setSelectedInv(""); }}
-                            style={{ padding: "5px 8px", background: "transparent", color: "#aaa",
-                              border: "1px solid #444", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
-                          >
-                            ✕
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => { setAssignTarget(c.case_id); setSelectedInv(""); }}
-                          style={{ padding: "5px 12px", background: "transparent", color: "#00d4ff",
-                            border: "1px solid #00d4ff", borderRadius: "4px", cursor: "pointer",
-                            fontSize: "12px", whiteSpace: "nowrap" }}
-                        >
-                          + Assign
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -308,19 +308,18 @@ function AdminPage() {
         </div>
       )}
 
-      {/* ══════════ ACCOUNT REQUESTS TAB ══════════ */}
+      {/* ══ ACCOUNT REQUESTS TAB ══ */}
       {activeTab === "Account Requests" && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px" }}>
-            <h2 style={{ margin: 0 }}>Account Requests</h2>
-            <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px" }}>
+            <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>
+              Account Requests
+            </span>
+            <div style={{ display: "flex", gap: "6px" }}>
               {["Pending", "Approved", "Denied", "All"].map((f) => (
-                <button key={f} onClick={() => setReqFilter(f)} style={{
-                  padding: "5px 14px", borderRadius: "4px", border: "1px solid #333",
-                  background: reqFilter === f ? "#00d4ff" : "transparent",
-                  color: reqFilter === f ? "#0f0f1a" : "#aaa",
-                  cursor: "pointer", fontWeight: reqFilter === f ? "bold" : "normal", fontSize: "13px",
-                }}>
+                <button key={f} onClick={() => setReqFilter(f)}
+                  className={`cv-btn ${reqFilter === f ? "cv-btn-primary" : "cv-btn-secondary"}`}
+                  style={{ padding: "4px 12px", fontSize: "12px" }}>
                   {f}
                 </button>
               ))}
@@ -329,72 +328,68 @@ function AdminPage() {
 
           {reqMessage && (
             <div style={{ marginBottom: "12px", fontSize: "13px",
-              color: reqMessage.startsWith("Error") ? "#ff4d4d" : "#00cc66" }}>
+              color: reqMessage.startsWith("Error") ? "#f87171" : "#34d399" }}>
               {reqMessage}
             </div>
           )}
 
           {reqLoading ? (
-            <p style={{ color: "#aaa" }}>Loading...</p>
+            <p style={{ color: "var(--cv-text3)" }}>Loading...</p>
           ) : requests.length === 0 ? (
-            <p style={{ color: "#555", fontSize: "13px" }}>No {reqFilter.toLowerCase()} requests.</p>
+            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No {reqFilter.toLowerCase()} requests.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {requests.map((r) => (
                 <div key={r.request_id} style={{
-                  background: "#1a1a2e", border: "1px solid #333", borderRadius: "6px",
-                  padding: "18px 20px",
+                  background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                  borderRadius: "5px", padding: "16px 20px",
                   display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto",
                   alignItems: "center", gap: "16px",
                 }}>
                   <div>
-                    <div style={{ fontWeight: "bold", color: "white", marginBottom: "4px" }}>
+                    <div style={{ fontWeight: "600", color: "var(--cv-text)", marginBottom: "3px" }}>
                       {r.first_name} {r.last_name}
                     </div>
-                    <div style={{ color: "#aaa", fontSize: "12px" }}>{r.contact_email}</div>
+                    <div style={{ color: "var(--cv-text2)", fontSize: "12px" }}>{r.contact_email}</div>
                     {r.contact_phone && (
-                      <div style={{ color: "#555", fontSize: "11px", marginTop: "2px" }}>{r.contact_phone}</div>
+                      <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "2px" }}>{r.contact_phone}</div>
                     )}
                   </div>
                   <div>
-                    <div style={{ fontSize: "12px", color: "#00d4ff", textTransform: "capitalize", marginBottom: "4px" }}>
+                    <div style={{ fontSize: "12px", color: "var(--cv-blue-l)", textTransform: "capitalize", marginBottom: "3px" }}>
                       {r.requested_role}
                     </div>
                     {r.requested_admin_level && (
-                      <div style={{ fontSize: "11px", color: levelColor(r.requested_admin_level), marginBottom: "2px" }}>
-                        Requested: {r.requested_admin_level}
+                      <div style={{ fontSize: "11px", fontWeight: "600", color: levelColor(r.requested_admin_level), marginBottom: "2px" }}>
+                        {r.requested_admin_level}
                       </div>
                     )}
-                    {r.badge_number && <div style={{ fontSize: "11px", color: "#aaa" }}>Badge: {r.badge_number}</div>}
-                    {r.rank && <div style={{ fontSize: "11px", color: "#aaa" }}>Rank: {r.rank}</div>}
+                    {r.badge_number && <div style={{ fontSize: "11px", color: "var(--cv-text2)" }}>Badge: {r.badge_number}</div>}
+                    {r.rank && <div style={{ fontSize: "11px", color: "var(--cv-text2)" }}>Rank: {r.rank}</div>}
                     {r.department_id && (
-                      <div style={{ fontSize: "11px", color: "#aaa" }}>
+                      <div style={{ fontSize: "11px", color: "var(--cv-text2)" }}>
                         Dept: {departments.find((d) => d.department_id === r.department_id)?.name ?? r.department_id}
                       </div>
                     )}
                   </div>
                   <div>
-                    <div style={{ fontSize: "12px", fontWeight: "bold",
-                      color: reqStatusColor(r.status), marginBottom: "4px" }}>
+                    <div style={{ fontSize: "12px", fontWeight: "600",
+                      color: reqStatusColor(r.status), marginBottom: "3px" }}>
                       {r.status}
                     </div>
-                    <div style={{ fontSize: "11px", color: "#555" }}>
+                    <div style={{ fontSize: "11px", color: "var(--cv-text3)" }}>
                       {new Date(r.requested_at).toLocaleString()}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
                     {r.status === "Pending" && (
                       <>
                         <button onClick={() => decide(r.request_id, "approve")}
-                          style={{ padding: "6px 14px", background: "#00cc66", color: "#0f0f1a",
-                            border: "none", borderRadius: "4px", cursor: "pointer",
-                            fontWeight: "bold", fontSize: "12px" }}>
+                          className="cv-btn cv-btn-success" style={{ padding: "5px 12px", fontSize: "12px" }}>
                           Approve
                         </button>
                         <button onClick={() => decide(r.request_id, "deny")}
-                          style={{ padding: "6px 14px", background: "transparent", color: "#ff4d4d",
-                            border: "1px solid #ff4d4d", borderRadius: "4px", cursor: "pointer",
-                            fontWeight: "bold", fontSize: "12px" }}>
+                          className="cv-btn cv-btn-danger" style={{ padding: "5px 12px", fontSize: "12px" }}>
                           Deny
                         </button>
                       </>
@@ -407,51 +402,48 @@ function AdminPage() {
         </div>
       )}
 
-      {/* ══════════ DEPARTMENTS TAB ══════════ */}
+      {/* ══ DEPARTMENTS TAB ══ */}
       {activeTab === "Departments" && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "14px" }}>
-            <h2 style={{ margin: 0 }}>Departments</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "14px" }}>
+            <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>Departments</span>
             <button onClick={() => setShowDeptForm((p) => !p)}
-              style={{ padding: "5px 14px", background: showDeptForm ? "#333" : "#00d4ff",
-                color: showDeptForm ? "#aaa" : "#0f0f1a", border: "none", borderRadius: "4px",
-                cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
+              className={`cv-btn ${showDeptForm ? "cv-btn-secondary" : "cv-btn-primary"}`}
+              style={{ padding: "5px 12px", fontSize: "12px" }}>
               {showDeptForm ? "Cancel" : "+ Add Department"}
             </button>
           </div>
 
           {deptMessage && (
             <div style={{ marginBottom: "10px", fontSize: "13px",
-              color: deptMessage.startsWith("Error") ? "#ff4d4d" : "#00cc66" }}>
+              color: deptMessage.startsWith("Error") ? "#f87171" : "#34d399" }}>
               {deptMessage}
             </div>
           )}
 
           {showDeptForm && (
             <form onSubmit={submitDepartment} style={{
-              background: "#1a1a2e", border: "1px solid #333", borderRadius: "6px",
-              padding: "18px 20px", marginBottom: "14px",
+              background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+              borderRadius: "6px", padding: "18px 20px", marginBottom: "16px",
               display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
             }}>
               <Field label="Department Name *">
-                <input value={deptForm.name} onChange={setDept("name")} required style={inputStyle} />
+                <input value={deptForm.name} onChange={setDept("name")} required className="cv-input" />
               </Field>
               <Field label="Type *">
-                <select value={deptForm.department_type} onChange={setDept("department_type")} required style={inputStyle}>
+                <select value={deptForm.department_type} onChange={setDept("department_type")} required className="cv-input">
                   <option value="">Select type...</option>
                   {DEPT_TYPES.map((t) => <option key={t}>{t}</option>)}
                 </select>
               </Field>
-              <Field label="Contact Email (optional)">
-                <input type="email" value={deptForm.contact_email} onChange={setDept("contact_email")} style={inputStyle} />
+              <Field label="Contact Email">
+                <input type="email" value={deptForm.contact_email} onChange={setDept("contact_email")} className="cv-input" />
               </Field>
-              <Field label="Contact Phone (optional)">
-                <input value={deptForm.contact_phone} onChange={setDept("contact_phone")} style={inputStyle} />
+              <Field label="Contact Phone">
+                <input value={deptForm.contact_phone} onChange={setDept("contact_phone")} className="cv-input" />
               </Field>
               <div style={{ gridColumn: "1 / -1" }}>
-                <button type="submit" style={{ padding: "8px 20px", background: "#00d4ff", color: "#0f0f1a",
-                  border: "none", borderRadius: "4px", cursor: "pointer",
-                  fontWeight: "bold", fontSize: "13px" }}>
+                <button type="submit" className="cv-btn cv-btn-primary" style={{ padding: "7px 20px" }}>
                   Create Department
                 </button>
               </div>
@@ -459,14 +451,16 @@ function AdminPage() {
           )}
 
           {departments.length === 0 ? (
-            <p style={{ color: "#555", fontSize: "13px" }}>No departments yet.</p>
+            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No departments yet.</p>
           ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {departments.map((d) => (
                 <div key={d.department_id} style={{
-                  background: "#1a1a2e", border: "1px solid #333", borderRadius: "6px", padding: "10px 16px" }}>
-                  <div style={{ color: "white", fontWeight: "bold", fontSize: "13px" }}>{d.name}</div>
-                  <div style={{ color: "#555", fontSize: "11px", marginTop: "2px" }}>{d.department_type}</div>
+                  background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                  borderRadius: "5px", padding: "10px 14px",
+                }}>
+                  <div style={{ color: "var(--cv-text)", fontWeight: "600", fontSize: "13px" }}>{d.name}</div>
+                  <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "2px" }}>{d.department_type}</div>
                 </div>
               ))}
             </div>
@@ -474,62 +468,177 @@ function AdminPage() {
         </div>
       )}
 
-      {/* ══════════ ADMIN MANAGEMENT TAB (SUPER_ADMIN only) ══════════ */}
+      {/* ══ AUDIT LOG TAB ══ */}
+      {activeTab === "Audit Log" && (() => {
+        const byUser = auditLog.reduce((acc, e) => {
+          if (!acc[e.user_id]) acc[e.user_id] = { user_id: e.user_id, user_name: e.user_name, events: [] };
+          acc[e.user_id].events.push(e);
+          return acc;
+        }, {});
+        const auditUsers = Object.values(byUser).sort(
+          (a, b) => new Date(b.events[0].time_stamp) - new Date(a.events[0].time_stamp)
+        );
+        const userEvents = selectedAuditUser ? (byUser[selectedAuditUser]?.events ?? []) : [];
+
+        return (
+          <div>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "20px" }}>
+              {selectedAuditUser && (
+                <button onClick={() => setSelectedAuditUser(null)}
+                  className="cv-btn cv-btn-secondary" style={{ padding: "4px 12px", fontSize: "12px" }}>
+                  ← All Users
+                </button>
+              )}
+              <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>
+                {selectedAuditUser
+                  ? `${byUser[selectedAuditUser]?.user_name ?? "User"} — Activity Log`
+                  : "Audit Log"}
+              </span>
+              {!selectedAuditUser && (
+                <span style={{ fontSize: "12px", color: "var(--cv-text3)" }}>
+                  {auditUsers.length} user{auditUsers.length !== 1 ? "s" : ""} · {auditLog.length} total events
+                </span>
+              )}
+              {selectedAuditUser && (
+                <span style={{ fontSize: "12px", color: "var(--cv-text3)" }}>
+                  {userEvents.length} event{userEvents.length !== 1 ? "s" : ""} — newest first
+                </span>
+              )}
+              <button onClick={fetchAuditLog} className="cv-btn cv-btn-secondary"
+                style={{ padding: "4px 12px", fontSize: "12px", marginLeft: "auto" }}>
+                Refresh
+              </button>
+            </div>
+
+            {auditLoading ? (
+              <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>Loading...</p>
+            ) : auditLog.length === 0 ? (
+              <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No audit events recorded yet.</p>
+            ) : selectedAuditUser ? (
+              /* ── Individual user events ── */
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {userEvents.map((a) => (
+                  <div key={a._id} style={{
+                    display: "grid", gridTemplateColumns: "160px 1fr 160px",
+                    alignItems: "center", gap: "12px",
+                    padding: "9px 14px", background: "var(--cv-surface)",
+                    border: "1px solid var(--cv-border)", borderLeft: "3px solid var(--cv-blue)",
+                    borderRadius: "4px", fontSize: "12px",
+                  }}>
+                    <span style={{ color: "var(--cv-blue-l)", fontWeight: "600", fontSize: "11px" }}>
+                      {a.action_type}
+                    </span>
+                    <span style={{ color: "var(--cv-text2)" }}>{a.description}</span>
+                    <span style={{ color: "var(--cv-text3)", textAlign: "right" }}>
+                      {new Date(a.time_stamp).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* ── User list ── */
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {auditUsers.map((u) => (
+                  <div key={u.user_id}
+                    onClick={() => setSelectedAuditUser(u.user_id)}
+                    style={{
+                      background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                      borderRadius: "5px", padding: "14px 18px", cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: "16px",
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--cv-raised)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "var(--cv-surface)"}
+                  >
+                    <div style={{
+                      width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
+                      background: "var(--cv-blue-bg)", border: "1px solid var(--cv-border2)",
+                      color: "var(--cv-blue-l)", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontWeight: "700", fontSize: "12px",
+                    }}>
+                      {(u.user_name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "600", fontSize: "13px", color: "var(--cv-text)" }}>
+                        {u.user_name}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--cv-text3)", marginTop: "2px" }}>
+                        Last activity: {new Date(u.events[0].time_stamp).toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--cv-text)" }}>
+                        {u.events.length}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "var(--cv-text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        action{u.events.length !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ══ ADMIN MANAGEMENT TAB ══ */}
       {activeTab === "Admin Management" && isSuperAdmin && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "14px" }}>
-            <h2 style={{ margin: 0 }}>Admin Accounts</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "14px" }}>
+            <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>Admin Accounts</span>
             {adminMsg && (
-              <span style={{ fontSize: "13px", color: adminMsg.startsWith("Error") ? "#ff4d4d" : "#00cc66" }}>
+              <span style={{ fontSize: "12px", color: adminMsg.startsWith("Error") ? "#f87171" : "#34d399" }}>
                 {adminMsg}
               </span>
             )}
           </div>
 
-          <div style={{ marginBottom: "12px", fontSize: "12px", color: "#555" }}>
-            Level guide: SUPER_ADMIN → full control · ADMIN → operational · SUPERVISOR → reviewer · VIEWER → read-only
+          <div style={{ marginBottom: "12px", fontSize: "12px", color: "var(--cv-text3)" }}>
+            SUPER_ADMIN — full control &nbsp;·&nbsp; ADMIN — operational &nbsp;·&nbsp; SUPERVISOR — reviewer &nbsp;·&nbsp; VIEWER — read-only
           </div>
 
           {admins.length === 0 ? (
-            <p style={{ color: "#555", fontSize: "13px" }}>No admins found.</p>
+            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No admins found.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {admins.map((a) => (
                 <div key={a.user_id} style={{
-                  background: "#1a1a2e", border: "1px solid #333", borderRadius: "6px",
-                  padding: "14px 18px", display: "grid",
-                  gridTemplateColumns: "1fr 1fr 200px 120px", alignItems: "center", gap: "16px",
+                  background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+                  borderRadius: "5px", padding: "12px 16px",
+                  display: "grid", gridTemplateColumns: "1fr 120px 200px 100px",
+                  alignItems: "center", gap: "16px",
                 }}>
                   <div>
-                    <div style={{ fontWeight: "bold", color: "white", fontSize: "13px" }}>
+                    <div style={{ fontWeight: "600", color: "var(--cv-text)", fontSize: "13px" }}>
                       {a.first_name} {a.last_name}
                       {a.user_id === user?.user_id && (
-                        <span style={{ color: "#555", fontWeight: "normal", marginLeft: "8px", fontSize: "11px" }}>(you)</span>
+                        <span style={{ color: "var(--cv-text3)", fontWeight: "400", marginLeft: "8px", fontSize: "11px" }}>(you)</span>
                       )}
                     </div>
-                    <div style={{ color: "#aaa", fontSize: "12px", marginTop: "2px" }}>{a.email}</div>
+                    <div style={{ color: "var(--cv-text2)", fontSize: "12px", marginTop: "2px" }}>{a.email}</div>
+                    {a.admin_level !== "SUPER_ADMIN" && a.department_name && (
+                      <div style={{ color: "var(--cv-text3)", fontSize: "11px", marginTop: "2px" }}>{a.department_name}</div>
+                    )}
                   </div>
-
-                  <div style={{ fontSize: "12px", fontWeight: "bold", color: levelColor(a.admin_level) }}>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: levelColor(a.admin_level) }}>
                     {a.admin_level}
                   </div>
-
                   <select
                     value={levelChanges[a.user_id] ?? a.admin_level}
                     onChange={(e) => setLevelChanges((p) => ({ ...p, [a.user_id]: e.target.value }))}
                     disabled={a.user_id === user?.user_id}
-                    style={{ ...inputStyle, opacity: a.user_id === user?.user_id ? 0.4 : 1 }}
+                    className="cv-input"
+                    style={{ opacity: a.user_id === user?.user_id ? 0.4 : 1 }}
                   >
                     {ADMIN_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                   </select>
-
                   <button
                     onClick={() => submitLevelChange(a.user_id)}
                     disabled={a.user_id === user?.user_id || !levelChanges[a.user_id] || levelChanges[a.user_id] === a.admin_level}
-                    style={{ padding: "7px 14px", background: "#00d4ff", color: "#0f0f1a",
-                      border: "none", borderRadius: "4px", cursor: "pointer",
-                      fontWeight: "bold", fontSize: "12px",
-                      opacity: (a.user_id === user?.user_id || !levelChanges[a.user_id] || levelChanges[a.user_id] === a.admin_level) ? 0.4 : 1 }}
+                    className="cv-btn cv-btn-primary"
+                    style={{ padding: "6px 12px", fontSize: "12px" }}
                   >
                     Update
                   </button>
@@ -546,19 +655,16 @@ function AdminPage() {
 function Field({ label, children }) {
   return (
     <div>
-      <label style={{ fontSize: "11px", color: "#666", textTransform: "uppercase",
-        letterSpacing: "0.06em", display: "block", marginBottom: "5px" }}>
+      <label style={{
+        display: "block", fontSize: "11px", fontWeight: "600",
+        color: "var(--cv-text2)", textTransform: "uppercase",
+        letterSpacing: "0.07em", marginBottom: "6px",
+      }}>
         {label}
       </label>
       {children}
     </div>
   );
 }
-
-const inputStyle = {
-  width: "100%", padding: "8px 10px", borderRadius: "4px",
-  border: "1px solid #444", background: "#0f0f1a",
-  color: "white", fontSize: "13px", boxSizing: "border-box",
-};
 
 export default AdminPage;

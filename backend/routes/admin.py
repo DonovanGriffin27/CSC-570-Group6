@@ -4,9 +4,9 @@ from db.connection import get_connection
 from db.queries.case_queries import get_all_cases_overview
 from db.queries.user_queries import get_all_investigators, get_all_admins, update_admin_level
 from db.mongo_connection import get_mongo_db
-from db.queries.mongo_queries import add_timeline_event, log_audit_event
+from db.queries.mongo_queries import add_timeline_event, log_audit_event, get_all_audit_events
+from middleware.auth_middleware import require_admin, require_super_admin, require_any_admin
 from db.queries.assignment_queries import assign_investigator
-from middleware.auth_middleware import require_admin, require_super_admin
 
 router = APIRouter(prefix="/admin")
 
@@ -53,6 +53,13 @@ def admin_assign_investigator(case_id: int, body: AssignBody, admin=Depends(requ
     conn = get_connection()
     try:
         assignment_id = assign_investigator(conn, case_id, body.user_id)
+        with conn.cursor() as cur:
+            cur.execute("SELECT first_name, last_name FROM users WHERE user_id = %s", (body.user_id,))
+            row = cur.fetchone()
+            inv_name = f"{row[0]} {row[1]}" if row else f"User {body.user_id}"
+            cur.execute("SELECT case_number FROM cases WHERE case_id = %s", (case_id,))
+            cn_row = cur.fetchone()
+            case_number = cn_row[0] if cn_row else str(case_id)
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -63,16 +70,22 @@ def admin_assign_investigator(case_id: int, body: AssignBody, admin=Depends(requ
     db = get_mongo_db()
     add_timeline_event(
         db, case_id, "STATUS_CHANGE", admin["user_id"],
-        f"Investigator assigned to case by {admin_name}",
+        f"{inv_name} assigned to case by {admin_name}",
         created_by_name=admin_name,
     )
     log_audit_event(
         db, admin["user_id"], "INVESTIGATOR_ASSIGNED",
-        f"{admin_name} assigned investigator (user {body.user_id}) to case {case_id}",
+        f"{admin_name} assigned {inv_name} to case {case_number}",
         case_id=case_id, user_name=admin_name,
     )
 
     return {"assignment_id": assignment_id}
+
+
+@router.get("/audit")
+def get_audit_log(admin=Depends(require_any_admin)):
+    db = get_mongo_db()
+    return get_all_audit_events(db)
 
 
 # ── Admin management (SUPER_ADMIN only) ─────────────────────────────────────

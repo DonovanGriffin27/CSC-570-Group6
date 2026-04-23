@@ -10,7 +10,7 @@ def create_case(conn, priority, title=None):
     case_id = cur.fetchone()[0]
 
     year = __import__('datetime').datetime.now().year
-    case_number = f"CASE-{year}-{str(case_id).zfill(4)}"
+    case_number = f"CR-{year}-{str(case_id).zfill(6)}"
 
     cur.execute("""
         UPDATE cases SET case_number = %s WHERE case_id = %s;

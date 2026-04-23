@@ -73,3 +73,8 @@ def get_audit_by_case(db, case_id: int) -> list:
 def get_audit_by_user(db, user_id: int) -> list:
     docs = db.audit_events.find({"user_id": user_id}).sort("time_stamp", -1).limit(50)
     return [_serialize(d) for d in docs]
+
+
+def get_all_audit_events(db, limit: int = 500) -> list:
+    docs = db.audit_events.find({}).sort("time_stamp", -1).limit(limit)
+    return [_serialize(d) for d in docs]
