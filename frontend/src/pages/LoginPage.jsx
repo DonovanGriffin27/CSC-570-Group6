@@ -1,5 +1,7 @@
+// Authored by James Williams in collaboration with Claude
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { API } from "../constants/api";
 
 function LoginPage({ onRequestAccount }) {
   const { login } = useAuth();
@@ -13,7 +15,7 @@ function LoginPage({ onRequestAccount }) {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/auth/login", {
+      const res = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

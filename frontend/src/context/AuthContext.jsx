@@ -1,3 +1,4 @@
+// Authored by James Williams in collaboration with Claude
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 
 const AuthContext = createContext(null);
@@ -12,6 +13,7 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem(USER_KEY);
     return saved ? JSON.parse(saved) : null;
   });
+  const [timedOut, setTimedOut] = useState(false);
 
   const inactivityTimer = useRef(null);
 
@@ -19,16 +21,29 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setTimedOut(false);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(USER_KEY);
     clearTimeout(inactivityTimer.current);
   }, []);
 
+  // ── Inactivity timeout — same as logout but flags the reason ─────────────
+  const logoutDueToInactivity = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setTimedOut(true);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(USER_KEY);
+    clearTimeout(inactivityTimer.current);
+  }, []);
+
+  const clearTimedOut = useCallback(() => setTimedOut(false), []);
+
   // ── Reset the 30-min inactivity clock ────────────────────────────────────
   const resetTimer = useCallback(() => {
     clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(logout, INACTIVITY_MS);
-  }, [logout]);
+    inactivityTimer.current = setTimeout(logoutDueToInactivity, INACTIVITY_MS);
+  }, [logoutDueToInactivity]);
 
   // ── Attach / detach activity listeners while logged in ───────────────────
   useEffect(() => {
@@ -53,7 +68,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, login, logout, timedOut, clearTimedOut }}>
       {children}
     </AuthContext.Provider>
   );

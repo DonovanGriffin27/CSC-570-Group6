@@ -1,5 +1,10 @@
+// Authored by James Williams in collaboration with Claude
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import EvidencePanel from "../components/EvidencePanel";
+import PeoplePanel from "../components/PeoplePanel";
+import CourtDatesPanel from "../components/CourtDatesPanel";
+import { API } from "../constants/api";
 
 const priorityColor = (p) =>
   p === "High" ? "#f87171" : p === "Medium" ? "#f59e0b" : "#34d399";
@@ -8,9 +13,17 @@ const statusColor = (s) =>
   s === "Closed" ? "#8b9ab4" : s === "In Progress" ? "#60a5fa" : "#34d399";
 
 const eventTypeColor = (t) =>
-  t === "STATUS_CHANGE" ? "#f59e0b"
-  : t === "NOTE_ADDED" ? "#60a5fa"
-  : t === "EVIDENCE_ADDED" ? "#a78bfa"
+  t === "STATUS_CHANGE"       ? "#f59e0b"
+  : t === "NOTE_ADDED"        ? "#60a5fa"
+  : t === "EVIDENCE_ADDED"    ? "#a78bfa"
+  : t === "COURT_DATE_ADDED"  ? "#a78bfa"
+  : t === "SUSPECT_ADDED"     ? "#f59e0b"
+  : t === "VICTIM_ADDED"      ? "#f59e0b"
+  : t === "SUSPECT_UPDATED"   ? "#60a5fa"
+  : t === "SUSPECT_REMOVED"   ? "#f87171"
+  : t === "VICTIM_REMOVED"    ? "#f87171"
+  : t === "COURT_DATE_REMOVED"? "#f87171"
+  : t === "REPORT_FILED"      ? "#34d399"
   : "#8b9ab4";
 
 function Section({ title, children, placeholder }) {
@@ -82,7 +95,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
 
   useEffect(() => {
     if (!canAssign) return;
-    fetch("http://127.0.0.1:8000/admin/investigators", { headers: authHeaders })
+    fetch(`${API}/admin/investigators`, { headers: authHeaders })
       .then((r) => r.ok ? r.json() : [])
       .then(setInvestigators)
       .catch(() => {});
@@ -107,10 +120,12 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
   }, [noteMessage]);
 
   const fetchAll = async () => {
-    const [caseRes, reportRes, assignRes] = await Promise.all([
-      fetch(`http://127.0.0.1:8000/cases/${caseId}`, { headers: authHeaders }),
-      fetch(`http://127.0.0.1:8000/crime-reports/${caseId}`, { headers: authHeaders }),
-      fetch(`http://127.0.0.1:8000/assignments/case/${caseId}`, { headers: authHeaders }),
+    const [caseRes, reportRes, assignRes, notesRes, timelineRes] = await Promise.all([
+      fetch(`${API}/cases/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/crime-reports/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/assignments/case/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/notes/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/timeline/${caseId}`, { headers: authHeaders }),
     ]);
     const caseJson = await caseRes.json();
     setCaseData(caseJson);
@@ -119,13 +134,14 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
     setStatus(caseJson.status);
     if (reportRes.ok) setReports(await reportRes.json());
     if (assignRes.ok) setAssignments(await assignRes.json());
-    await fetchMongo();
+    if (notesRes.ok) setNotes(await notesRes.json());
+    if (timelineRes.ok) setTimeline(await timelineRes.json());
   };
 
   const fetchMongo = async () => {
     const [notesRes, timelineRes] = await Promise.all([
-      fetch(`http://127.0.0.1:8000/notes/${caseId}`, { headers: authHeaders }),
-      fetch(`http://127.0.0.1:8000/timeline/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/notes/${caseId}`, { headers: authHeaders }),
+      fetch(`${API}/timeline/${caseId}`, { headers: authHeaders }),
     ]);
     if (notesRes.ok) setNotes(await notesRes.json());
     if (timelineRes.ok) setTimeline(await timelineRes.json());
@@ -138,9 +154,23 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
     setEditing(false);
   };
 
+  const setStatusDirectly = async (newStatus) => {
+    const res = await fetch(`${API}/cases/${caseId}`, {
+      method: "PATCH", headers: authHeaders,
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (res.ok) {
+      setCaseData((prev) => ({ ...prev, status: newStatus }));
+      setStatus(newStatus);
+      setSaveMessage(newStatus === "Closed" ? "Case closed." : "Case reopened.");
+      fetchMongo();
+      if (onCaseUpdated) onCaseUpdated();
+    }
+  };
+
   const saveChanges = async () => {
     setSaving(true);
-    const res = await fetch(`http://127.0.0.1:8000/cases/${caseId}`, {
+    const res = await fetch(`${API}/cases/${caseId}`, {
       method: "PATCH", headers: authHeaders,
       body: JSON.stringify({ title, priority, status }),
     });
@@ -157,7 +187,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
   const submitNote = async () => {
     if (!newNote.trim()) return;
     setSubmittingNote(true);
-    const res = await fetch(`http://127.0.0.1:8000/notes/${caseId}`, {
+    const res = await fetch(`${API}/notes/${caseId}`, {
       method: "POST", headers: authHeaders,
       body: JSON.stringify({ note_text: newNote }),
     });
@@ -174,7 +204,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
 
   const submitAssign = async () => {
     if (!selectedInv) return;
-    const res = await fetch(`http://127.0.0.1:8000/admin/cases/${caseId}/assign`, {
+    const res = await fetch(`${API}/admin/cases/${caseId}/assign`, {
       method: "POST", headers: authHeaders,
       body: JSON.stringify({ user_id: parseInt(selectedInv) }),
     });
@@ -183,7 +213,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
       setAssignMsg("Investigator assigned.");
       setShowAssignForm(false);
       setSelectedInv("");
-      const assignRes = await fetch(`http://127.0.0.1:8000/assignments/case/${caseId}`, { headers: authHeaders });
+      const assignRes = await fetch(`${API}/assignments/case/${caseId}`, { headers: authHeaders });
       if (assignRes.ok) setAssignments(await assignRes.json());
       if (onCaseUpdated) onCaseUpdated();
     } else {
@@ -265,7 +295,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
                 <span style={{ fontSize: "10px", fontWeight: "600", padding: "2px 7px", borderRadius: "3px",
                   background: `${eventTypeColor(e.event_type)}18`, color: eventTypeColor(e.event_type),
                   border: `1px solid ${eventTypeColor(e.event_type)}30`, whiteSpace: "nowrap", marginTop: "1px" }}>
-                  {e.event_type.replace("_", " ")}
+                  {e.event_type.replaceAll("_", " ")}
                 </span>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: "var(--cv-text2)", fontSize: "13px" }}>{e.description}</div>
@@ -305,24 +335,24 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
             {caseData.date_closed && ` · Closed ${new Date(caseData.date_closed).toLocaleDateString()}`}
           </div>
         </div>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <span style={{
-            fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "3px",
-            background: `${priorityColor(caseData.priority)}18`,
-            color: priorityColor(caseData.priority),
-            border: `1px solid ${priorityColor(caseData.priority)}40`,
-          }}>
-            {caseData.priority}
-          </span>
-          <span style={{
-            fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "3px",
-            background: `${statusColor(caseData.status)}18`,
-            color: statusColor(caseData.status),
-            border: `1px solid ${statusColor(caseData.status)}40`,
-          }}>
-            {caseData.status}
-          </span>
-        </div>
+        {!isAdmin && caseData.status !== "Closed" && (
+          <button
+            onClick={() => setStatusDirectly("Closed")}
+            className="cv-btn cv-btn-secondary"
+            style={{ padding: "4px 12px", fontSize: "12px", color: "#f87171", borderColor: "rgba(248,113,113,0.3)" }}
+          >
+            Close Case
+          </button>
+        )}
+        {!isAdmin && caseData.status === "Closed" && (
+          <button
+            onClick={() => setStatusDirectly("In Progress")}
+            className="cv-btn cv-btn-secondary"
+            style={{ padding: "4px 12px", fontSize: "12px" }}
+          >
+            Reopen
+          </button>
+        )}
         {saveMessage && (
           <span style={{ fontSize: "12px", color: "#34d399" }}>{saveMessage}</span>
         )}
@@ -492,12 +522,9 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
         )}
       </Section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-        <Section title="People Involved"
-          placeholder="Suspects, victims, and witnesses — requires people tables in database." />
-        <Section title="Evidence"
-          placeholder="Evidence intake and chain of custody — requires evidence queries." />
-      </div>
+      <PeoplePanel caseId={caseId} />
+
+      <EvidencePanel caseId={caseId} />
 
       {/* Investigation Notes */}
       <Section title="Investigation Notes">
@@ -557,8 +584,9 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
         }
       </Section>
 
-      <Section title="Court / Legal Info"
-        placeholder="Court dates and charges — requires court tables in database." />
+      <Section title="Court / Legal Info">
+        <CourtDatesPanel caseId={caseId} />
+      </Section>
 
       {/* Timeline */}
       <Section title="Timeline / Activity Feed">
@@ -579,7 +607,7 @@ function CaseDetailPage({ caseId, onBack, onCaseUpdated }) {
                       border: `1px solid ${eventTypeColor(e.event_type)}30`,
                       whiteSpace: "nowrap", marginTop: "1px",
                     }}>
-                      {e.event_type.replace("_", " ")}
+                      {e.event_type.replaceAll("_", " ")}
                     </span>
                     <div style={{ flex: 1 }}>
                       <div style={{ color: "var(--cv-text2)", fontSize: "13px" }}>{e.description}</div>

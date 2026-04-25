@@ -1,5 +1,7 @@
+// Authored by James Williams in collaboration with Claude
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
+import { API } from "../constants/api";
 
 function Sidebar({ activePage, onNavigate }) {
   const { user, token, logout } = useAuth();
@@ -17,11 +19,15 @@ function Sidebar({ activePage, onNavigate }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [showProfile]);
 
-  const links = [
-    { label: "Cases", page: "investigator" },
-    { label: "Evidence", page: "evidence" },
-    ...(user?.role === "admin" ? [{ label: "Admin Portal", page: "admin" }] : []),
-  ];
+  const links = user?.role === "admin"
+    ? [
+        { label: "Admin Portal", page: "admin" },
+        { label: "Evidence",     page: "evidence" },
+      ]
+    : [
+        { label: "Cases",    page: "investigator" },
+        { label: "Evidence", page: "evidence" },
+      ];
 
   return (
     <div style={{
@@ -32,13 +38,20 @@ function Sidebar({ activePage, onNavigate }) {
 
       {/* ── Brand header ── */}
       <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid var(--cv-border)" }}>
-        <div style={{
-          fontSize: "14px", fontWeight: "700", letterSpacing: "0.1em",
-          color: "var(--cv-text)", textTransform: "uppercase",
-        }}>
-          CaseVault
+        <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+          <img
+            src="/logo.png?v=2"
+            alt=""
+            style={{ width: "34px", height: "34px", objectFit: "contain", flexShrink: 0 }}
+          />
+          <div style={{
+            fontSize: "14px", fontWeight: "700", letterSpacing: "0.1em",
+            color: "var(--cv-text)", textTransform: "uppercase",
+          }}>
+            CaseVault
+          </div>
         </div>
-        <div style={{ fontSize: "10px", color: "var(--cv-text3)", marginTop: "3px", letterSpacing: "0.04em" }}>
+        <div style={{ fontSize: "10px", color: "var(--cv-text3)", marginTop: "5px", letterSpacing: "0.04em", paddingLeft: "43px" }}>
           Case Management System
         </div>
       </div>
@@ -123,7 +136,7 @@ function Sidebar({ activePage, onNavigate }) {
             <div
               onClick={async () => {
                 try {
-                  await fetch("http://127.0.0.1:8000/auth/logout", {
+                  await fetch(`${API}/auth/logout`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
                   });

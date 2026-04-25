@@ -1,6 +1,8 @@
+// Authored by James Williams in collaboration with Claude
 import { useState, useEffect } from "react";
 import CaseDetailPage from "./CaseDetailPage";
 import { useAuth } from "../context/AuthContext";
+import { API } from "../constants/api";
 
 const priorityColor = (p) =>
   p === "High" ? "#f87171" : p === "Medium" ? "#f59e0b" : "#34d399";
@@ -16,6 +18,7 @@ function InvestigatorPage() {
   const [cases, setCases]               = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [search, setSearch]             = useState("");
+  const [caseView, setCaseView]         = useState("active");
 
   const [showReportForm, setShowReportForm] = useState(false);
   const [caseTitle, setCaseTitle]       = useState("");
@@ -34,7 +37,7 @@ function InvestigatorPage() {
   }, [showReportForm]);
 
   const fetchCases = async () => {
-    const res = await fetch(`http://127.0.0.1:8000/assignments/investigator/${INVESTIGATOR_ID}`, {
+    const res = await fetch(`${API}/assignments/investigator/${INVESTIGATOR_ID}`, {
       headers: authH,
     });
     if (res.ok) setCases(await res.json());
@@ -44,7 +47,7 @@ function InvestigatorPage() {
     setSubmitting(true);
     setMessage("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/crime-reports", {
+      const res = await fetch(`${API}/crime-reports`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authH },
         body: JSON.stringify({ title: caseTitle, report_type: reportType, description }),
@@ -69,7 +72,11 @@ function InvestigatorPage() {
     }
   };
 
-  const filteredCases = cases.filter((c) => {
+  const viewedCases = cases.filter((c) =>
+    caseView === "active" ? c.status !== "Closed" : c.status === "Closed"
+  );
+
+  const filteredCases = viewedCases.filter((c) => {
     const term = search.toLowerCase();
     return (
       (c.case_number && c.case_number.toLowerCase().includes(term)) ||
@@ -77,9 +84,9 @@ function InvestigatorPage() {
     );
   });
 
-  const totalCases = cases.length;
   const activeCases = cases.filter((c) => c.status !== "Closed").length;
-  const highPriority = cases.filter((c) => c.priority === "High").length;
+  const closedCases = cases.filter((c) => c.status === "Closed").length;
+  const highPriority = cases.filter((c) => c.priority === "High" && c.status !== "Closed").length;
 
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden", height: "100%" }}>
@@ -110,14 +117,34 @@ function InvestigatorPage() {
 
           {/* Stats row */}
           <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
-            <StatChip label="Total" value={totalCases} />
             <StatChip label="Active" value={activeCases} color="var(--cv-blue-l)" />
-            <StatChip label="High" value={highPriority} color="#f87171" />
+            <StatChip label="Closed" value={closedCases} color="#8b9ab4" />
+            <StatChip label="High Pri" value={highPriority} color="#f87171" />
+          </div>
+
+          {/* Active / Closed toggle */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "10px" }}>
+            {["active", "closed"].map((v) => (
+              <button
+                key={v}
+                onClick={() => { setCaseView(v); setSelectedCaseId(null); setSearch(""); }}
+                style={{
+                  flex: 1, padding: "5px", fontSize: "11px", fontWeight: "600",
+                  borderRadius: "4px", cursor: "pointer", border: "1px solid",
+                  textTransform: "capitalize", letterSpacing: "0.04em",
+                  background: caseView === v ? "var(--cv-blue-bg)" : "transparent",
+                  borderColor: caseView === v ? "var(--cv-border2)" : "var(--cv-border)",
+                  color: caseView === v ? "var(--cv-blue-l)" : "var(--cv-text3)",
+                }}
+              >
+                {v === "active" ? "Active" : "Closed"}
+              </button>
+            ))}
           </div>
 
           <input
             className="cv-input"
-            placeholder="Search cases..."
+            placeholder={`Search ${caseView} cases...`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -127,7 +154,9 @@ function InvestigatorPage() {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {filteredCases.length === 0 ? (
             <div style={{ padding: "20px 16px", color: "var(--cv-text3)", fontSize: "13px" }}>
-              {search ? "No cases match your search." : "No active cases assigned."}
+              {search
+                ? "No cases match your search."
+                : caseView === "active" ? "No active cases assigned." : "No closed cases."}
             </div>
           ) : (
             filteredCases.map((c) => (
@@ -137,9 +166,10 @@ function InvestigatorPage() {
                 className={`cv-row${selectedCaseId === c.case_id ? " cv-row-selected" : ""}`}
                 style={{
                   padding: "11px 16px",
-                  borderLeft: `3px solid ${priorityColor(c.priority)}`,
+                  borderLeft: `3px solid ${c.status === "Closed" ? "#8b9ab4" : priorityColor(c.priority)}`,
                   borderBottom: "1px solid var(--cv-border)",
                   background: selectedCaseId === c.case_id ? "var(--cv-blue-bg)" : "transparent",
+                  opacity: c.status === "Closed" ? 0.75 : 1,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

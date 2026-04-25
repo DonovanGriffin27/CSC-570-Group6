@@ -1,4 +1,6 @@
+// Authored by James Williams in collaboration with Claude
 import { useState, useEffect } from "react";
+import { API } from "../constants/api";
 
 const ROLES = ["investigator", "admin"];
 
@@ -22,7 +24,7 @@ function AccountRequestPage({ onBack }) {
   const [loading, setLoading]         = useState(false);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/departments")
+    fetch(`${API}/departments`)
       .then((r) => r.json())
       .then(setDepartments)
       .catch(() => {});
@@ -55,7 +57,7 @@ function AccountRequestPage({ onBack }) {
         rank: isInvestigator ? (form.rank || null) : null,
         password: form.password,
       };
-      const res = await fetch("http://127.0.0.1:8000/auth/request-account", {
+      const res = await fetch(`${API}/auth/request-account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

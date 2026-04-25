@@ -37,33 +37,26 @@ function FormField({ label, children }) {
   );
 }
 
+function defaultAddForm() {
+  return {
+    evidence_type: "Physical Item", description: "", current_status: "Collected",
+    collection_location: "", condition_status: "Unknown",
+    file_name: "", file_type: "", file_hash: "",
+    metadata_tags: "", source_device: "", metadata_notes: "",
+  };
+}
+
 function defaultCustodyForm() {
   return { action_type: "", location: "", condition_status: "", notes: "" };
 }
 
-// ── Evidence detail panel ──────────────────────────────────────────────────
+// ── Evidence detail right panel ────────────────────────────────────────────
 
-function PortalDetail({ detail, onAddCustody }) {
+function EvidenceDetail({ detail, onAddCustody }) {
   const { evidence, metadata, custody_chain } = detail;
 
   return (
-    <div style={{ padding: "20px 24px" }}>
-
-      {/* Case context pill */}
-      <div style={{
-        fontSize: "11px", color: "var(--cv-text3)", marginBottom: "16px",
-        padding: "5px 10px", background: "var(--cv-raised)",
-        border: "1px solid var(--cv-border)", borderRadius: "4px",
-        display: "inline-flex", alignItems: "center", gap: "6px",
-      }}>
-        <span style={{ opacity: 0.6 }}>Case</span>
-        <strong style={{ color: "var(--cv-text2)" }}>
-          {evidence.case_number || `#${evidence.case_id}`}
-        </strong>
-        {evidence.case_title && (
-          <span style={{ color: "var(--cv-text3)" }}>— {evidence.case_title}</span>
-        )}
-      </div>
+    <div>
 
       {/* Overview */}
       <div style={{ marginBottom: "18px" }}>
@@ -118,7 +111,7 @@ function PortalDetail({ detail, onAddCustody }) {
         </div>
       </div>
 
-      {/* Digital Metadata */}
+      {/* Metadata — only when at least one field is populated */}
       {metadata && (
         metadata.file_name || metadata.file_type || metadata.file_hash ||
         metadata.source_device || metadata.gps_location ||
@@ -247,6 +240,7 @@ function PortalDetail({ detail, onAddCustody }) {
                   }} />
                 )}
               </div>
+
               <div style={{
                 flex: 1, background: "var(--cv-raised)", border: "1px solid var(--cv-border)",
                 borderRadius: "4px", padding: "10px 12px",
@@ -263,6 +257,7 @@ function PortalDetail({ detail, onAddCustody }) {
                     {new Date(ev.time_stamp).toLocaleString()}
                   </span>
                 </div>
+
                 {(ev.from_user_name || ev.to_user_name) && (
                   <div style={{ fontSize: "12px", color: "var(--cv-text2)", marginBottom: "4px" }}>
                     {ev.from_user_name && (
@@ -276,10 +271,12 @@ function PortalDetail({ detail, onAddCustody }) {
                     )}
                   </div>
                 )}
+
                 <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "var(--cv-text3)" }}>
                   {ev.location && <span>Location: {ev.location}</span>}
                   {ev.condition_status && <span>Condition: {ev.condition_status}</span>}
                 </div>
+
                 {ev.notes && (
                   <div style={{
                     fontSize: "12px", color: "var(--cv-text2)", marginTop: "6px",
@@ -298,35 +295,41 @@ function PortalDetail({ detail, onAddCustody }) {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
+// ── Main panel component ───────────────────────────────────────────────────
 
-function EvidencePage() {
-  const { token } = useAuth();
+function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
+  const { user, token } = useAuth();
   const authHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
-  const [allEvidence, setAllEvidence]       = useState([]);
-  const [loading, setLoading]               = useState(true);
+  const [list, setList]                   = useState([]);
+  const [selectedId, setSelectedId]       = useState(null);
+  const [detail, setDetail]               = useState(null);
+  const [loading, setLoading]             = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const [search, setSearch]                 = useState("");
-  const [filterType, setFilterType]         = useState("All");
-  const [filterStatus, setFilterStatus]     = useState("All");
+  const [search, setSearch]               = useState("");
+  const [filterStatus, setFilterStatus]   = useState("All");
 
-  const [selectedId, setSelectedId]         = useState(null);
-  const [detail, setDetail]                 = useState(null);
-  const [detailLoading, setDetailLoading]   = useState(false);
+  const [showAddModal, setShowAddModal]   = useState(false);
+  const [addForm, setAddForm]             = useState(defaultAddForm());
+  const [addLoading, setAddLoading]       = useState(false);
+  const [addError, setAddError]           = useState("");
 
   const [showCustodyModal, setShowCustodyModal] = useState(false);
   const [custodyForm, setCustodyForm]           = useState(defaultCustodyForm());
   const [custodyLoading, setCustodyLoading]     = useState(false);
   const [custodyError, setCustodyError]         = useState("");
 
-  useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchList(); }, [caseId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (selectedId !== null) fetchDetail(selectedId);
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchAll = async () => {
+  const fetchList = async () => {
     setLoading(true);
-    const r = await fetch(`${API}/evidence`, { headers: authHeaders });
+    const r = await fetch(`${API}/evidence/case/${caseId}`, { headers: authHeaders });
     setLoading(false);
-    if (r.ok) setAllEvidence(await r.json());
+    if (r.ok) setList(await r.json());
   };
 
   const fetchDetail = async (id) => {
@@ -340,7 +343,6 @@ function EvidencePage() {
     if (id === selectedId) return;
     setDetail(null);
     setSelectedId(id);
-    fetchDetail(id);
   };
 
   // Opens the custody modal with the first valid action pre-selected
@@ -350,6 +352,44 @@ function EvidencePage() {
     setCustodyForm({ ...defaultCustodyForm(), action_type: available[0] || "" });
     setCustodyError("");
     setShowCustodyModal(true);
+  };
+
+  const submitEvidence = async () => {
+    if (!addForm.description.trim()) { setAddError("Description is required."); return; }
+    setAddLoading(true);
+    setAddError("");
+    const tags = addForm.metadata_tags
+      ? addForm.metadata_tags.split(",").map((t) => t.trim()).filter(Boolean)
+      : [];
+    const body = {
+      case_id:              caseId,
+      evidence_type:        addForm.evidence_type,
+      description:          addForm.description,
+      current_status:       addForm.current_status,
+      collected_by_user_id: user.user_id,
+      collection_location:  addForm.collection_location || null,
+      condition_status:     addForm.condition_status,
+      file_name:            addForm.file_name      || null,
+      file_type:            addForm.file_type      || null,
+      file_hash:            addForm.file_hash      || null,
+      metadata_tags:        tags,
+      source_device:        addForm.source_device  || null,
+      metadata_notes:       addForm.metadata_notes || null,
+    };
+    const r = await fetch(`${API}/evidence`, {
+      method: "POST", headers: authHeaders, body: JSON.stringify(body),
+    });
+    setAddLoading(false);
+    if (r.ok) {
+      const data = await r.json();
+      setShowAddModal(false);
+      setAddForm(defaultAddForm());
+      await fetchList();
+      setSelectedId(data.evidence_id);
+    } else {
+      const data = await r.json().catch(() => ({}));
+      setAddError(data.detail || "Failed to add evidence.");
+    }
   };
 
   const submitCustodyEvent = async () => {
@@ -370,8 +410,8 @@ function EvidencePage() {
     if (r.ok) {
       setShowCustodyModal(false);
       setCustodyForm(defaultCustodyForm());
-      // Refresh the full list so the status badge updates, then refresh detail
-      await fetchAll();
+      // Refresh both the list (status badge) and the detail panel
+      await fetchList();
       await fetchDetail(selectedId);
     } else {
       const data = await r.json().catch(() => ({}));
@@ -379,210 +419,264 @@ function EvidencePage() {
     }
   };
 
-  // Stats computed from the full unfiltered list
-  const stats = EVIDENCE_STATUSES.reduce((acc, s) => {
-    acc[s] = allEvidence.filter((e) => e.current_status === s).length;
-    return acc;
-  }, {});
-
-  const filtered = allEvidence.filter((e) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q
-      || e.description?.toLowerCase().includes(q)
-      || e.evidence_type?.toLowerCase().includes(q)
-      || e.case_number?.toLowerCase().includes(q)
-      || e.case_title?.toLowerCase().includes(q);
-    const matchType   = filterType   === "All" || e.evidence_type  === filterType;
-    const matchStatus = filterStatus === "All" || e.current_status === filterStatus;
-    return matchSearch && matchType && matchStatus;
+  const filtered = list.filter((ev) => {
+    const matchSearch = !search
+      || ev.description?.toLowerCase().includes(search.toLowerCase())
+      || ev.evidence_type?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === "All" || ev.current_status === filterStatus;
+    return matchSearch && matchStatus;
   });
 
-  // Available actions for the selected evidence
+  // Compute available user-facing actions for the currently selected evidence
   const currentStatus    = detail?.evidence?.current_status || "";
   const availableActions = ACTIONS_FOR_STATUS[currentStatus] || [];
   const isTerminalStatus = currentStatus !== "" && availableActions.length === 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-
-      {/* ── Page header ── */}
+    <>
       <div style={{
-        padding: "18px 28px 16px",
-        borderBottom: "1px solid var(--cv-border)",
-        background: "var(--cv-surface)",
-        flexShrink: 0,
+        background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+        borderRadius: "6px", marginBottom: "14px", overflow: "hidden",
       }}>
-        <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--cv-text)", marginBottom: "2px" }}>
-          Evidence Portal
-        </div>
-        <div style={{ fontSize: "12px", color: "var(--cv-text3)" }}>
-          System-wide evidence inventory — search, filter, and track chain of custody across all cases.
-        </div>
-      </div>
-
-      {/* ── Stats bar ── */}
-      <div style={{
-        display: "flex", flexShrink: 0,
-        borderBottom: "1px solid var(--cv-border)",
-        background: "var(--cv-surface)",
-      }}>
+        {/* Header */}
         <div style={{
-          padding: "10px 20px", borderRight: "1px solid var(--cv-border)",
-          display: "flex", flexDirection: "column", alignItems: "center", minWidth: "72px",
+          padding: "14px 20px 12px", borderBottom: "1px solid var(--cv-border)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
-          <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--cv-text)", lineHeight: 1 }}>
-            {loading ? "—" : allEvidence.length}
-          </div>
-          <div style={{ fontSize: "10px", color: "var(--cv-text3)", textTransform: "uppercase",
-            letterSpacing: "0.06em", marginTop: "3px" }}>
-            Total
-          </div>
-        </div>
-
-        {EVIDENCE_STATUSES.map((s) => (
-          <div
-            key={s}
-            onClick={() => setFilterStatus(filterStatus === s ? "All" : s)}
-            style={{
-              padding: "10px 14px", borderRight: "1px solid var(--cv-border)",
-              display: "flex", flexDirection: "column", alignItems: "center",
-              cursor: "pointer", userSelect: "none",
-              background: filterStatus === s ? `${statusColor(s)}12` : "transparent",
-              transition: "background 0.12s",
-            }}
-          >
-            <div style={{
-              fontSize: "20px", fontWeight: "700",
-              color: filterStatus === s ? statusColor(s) : "var(--cv-text)",
-              lineHeight: 1,
-            }}>
-              {loading ? "—" : (stats[s] || 0)}
-            </div>
-            <div style={{
-              fontSize: "10px",
-              color: filterStatus === s ? statusColor(s) : "var(--cv-text3)",
-              textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "3px",
-              whiteSpace: "nowrap", fontWeight: filterStatus === s ? "600" : "normal",
-            }}>
-              {s}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Body ── */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-
-        {/* ── Left: evidence list ── */}
-        <div style={{
-          width: "300px", flexShrink: 0, borderRight: "1px solid var(--cv-border)",
-          display: "flex", flexDirection: "column", background: "var(--cv-surface)",
-        }}>
-          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--cv-border)", flexShrink: 0 }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search description, type, case..."
-              className="cv-input"
-              style={{ fontSize: "12px", marginBottom: "8px" }}
-            />
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="cv-input"
-              style={{ fontSize: "11px" }}
-            >
-              <option value="All">All Types</option>
-              {EVIDENCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          <div style={{
-            padding: "5px 12px", fontSize: "10px", color: "var(--cv-text3)",
-            borderBottom: "1px solid var(--cv-border)", flexShrink: 0,
-            textTransform: "uppercase", letterSpacing: "0.08em",
-          }}>
-            {loading
-              ? "Loading..."
-              : `${filtered.length} item${filtered.length !== 1 ? "s" : ""}${
-                  filtered.length !== allEvidence.length ? ` of ${allEvidence.length}` : ""
-                }`
-            }
-          </div>
-
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {loading ? (
-              <div style={{ padding: "16px 12px", color: "var(--cv-text3)", fontSize: "12px" }}>
-                Loading evidence...
-              </div>
-            ) : filtered.length === 0 ? (
-              <div style={{ padding: "16px 12px", color: "var(--cv-text3)", fontSize: "12px" }}>
-                {allEvidence.length === 0
-                  ? "No evidence on record."
-                  : "No items match your filters."}
-              </div>
-            ) : (
-              filtered.map((ev) => (
-                <div
-                  key={ev.evidence_id}
-                  onClick={() => handleSelect(ev.evidence_id)}
-                  className={selectedId === ev.evidence_id ? "cv-row cv-row-selected" : "cv-row"}
-                  style={{
-                    padding: "10px 12px", cursor: "pointer",
-                    borderBottom: "1px solid var(--cv-border)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "5px", alignItems: "center",
-                    marginBottom: "4px", flexWrap: "wrap" }}>
-                    <Badge value={ev.evidence_type} color={typeColor(ev.evidence_type)} />
-                    <Badge value={ev.current_status} color={statusColor(ev.current_status)} />
-                  </div>
-                  <div style={{
-                    fontSize: "12px", color: "var(--cv-text)", marginBottom: "4px",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    {ev.description}
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <span style={{
-                      fontSize: "10px", fontWeight: "600", color: "var(--cv-text3)",
-                      background: "var(--cv-raised)", padding: "1px 5px", borderRadius: "3px",
-                      border: "1px solid var(--cv-border)",
-                    }}>
-                      {ev.case_number || `Case #${ev.case_id}`}
-                    </span>
-                    <span style={{ fontSize: "10px", color: "var(--cv-text3)" }}>
-                      {ev.intake_date ? new Date(ev.intake_date).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-                </div>
-              ))
+          <h3 style={{ margin: 0, fontSize: "11px", fontWeight: "600", color: "var(--cv-text2)",
+            textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Evidence
+            {list.length > 0 && (
+              <span style={{ marginLeft: "8px", color: "var(--cv-text3)", fontWeight: "normal",
+                textTransform: "none", letterSpacing: "normal", fontSize: "12px" }}>
+                ({list.length})
+              </span>
             )}
-          </div>
+          </h3>
+          <button onClick={() => setShowAddModal(true)} className="cv-btn cv-btn-primary"
+            style={{ padding: "4px 12px", fontSize: "12px" }}>
+            + Add Evidence
+          </button>
         </div>
 
-        {/* ── Right: detail panel ── */}
-        <div style={{ flex: 1, overflowY: "auto", background: "var(--cv-base)" }}>
-          {!selectedId ? (
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center",
-              justifyContent: "center", height: "100%",
-              color: "var(--cv-text3)", fontSize: "13px", gap: "8px",
-            }}>
-              <div style={{ fontSize: "28px", opacity: 0.25 }}>🔍</div>
-              <div>Select an evidence item to view its detail and chain of custody.</div>
+        {/* Two-column body */}
+        <div style={{ display: "flex", minHeight: bodyMinHeight }}>
+
+          {/* Left — list */}
+          <div style={{
+            width: "252px", flexShrink: 0, borderRight: "1px solid var(--cv-border)",
+            display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid var(--cv-border)" }}>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search type or description..."
+                className="cv-input"
+                style={{ fontSize: "12px", marginBottom: "8px" }}
+              />
+              <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
+                {["All", ...EVIDENCE_STATUSES].map((s) => (
+                  <button key={s} onClick={() => setFilterStatus(s)} style={{
+                    fontSize: "10px", padding: "2px 6px", borderRadius: "3px", cursor: "pointer",
+                    border: `1px solid ${filterStatus === s ? "var(--cv-blue)" : "var(--cv-border)"}`,
+                    background: filterStatus === s ? "var(--cv-blue-bg)" : "transparent",
+                    color: filterStatus === s ? "var(--cv-blue)" : "var(--cv-text3)",
+                    fontWeight: filterStatus === s ? "600" : "normal",
+                  }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : detailLoading ? (
-            <div style={{ padding: "24px", color: "var(--cv-text3)", fontSize: "13px" }}>
-              Loading detail...
+
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {loading ? (
+                <div style={{ padding: "16px 12px", color: "var(--cv-text3)", fontSize: "12px" }}>
+                  Loading...
+                </div>
+              ) : filtered.length === 0 ? (
+                <div style={{ padding: "16px 12px", color: "var(--cv-text3)", fontSize: "12px" }}>
+                  {list.length === 0
+                    ? "No evidence on record for this case."
+                    : "No results match your filter."}
+                </div>
+              ) : (
+                filtered.map((ev) => (
+                  <div
+                    key={ev.evidence_id}
+                    onClick={() => handleSelect(ev.evidence_id)}
+                    className={selectedId === ev.evidence_id ? "cv-row cv-row-selected" : "cv-row"}
+                    style={{
+                      padding: "10px 12px", cursor: "pointer",
+                      borderBottom: "1px solid var(--cv-border)",
+                    }}
+                  >
+                    <div style={{ marginBottom: "4px" }}>
+                      <Badge value={ev.evidence_type} color={typeColor(ev.evidence_type)} />
+                    </div>
+                    <div style={{
+                      fontSize: "12px", color: "var(--cv-text)", marginBottom: "5px",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {ev.description}
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <Badge value={ev.current_status} color={statusColor(ev.current_status)} />
+                      <span style={{ fontSize: "10px", color: "var(--cv-text3)" }}>
+                        {new Date(ev.intake_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ) : detail ? (
-            <PortalDetail detail={detail} onAddCustody={openCustodyModal} />
-          ) : null}
+          </div>
+
+          {/* Right — detail */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
+            {!selectedId ? (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: "100%", color: "var(--cv-text3)", fontSize: "13px",
+              }}>
+                Select an evidence item to view details.
+              </div>
+            ) : detailLoading ? (
+              <div style={{ color: "var(--cv-text3)", fontSize: "13px" }}>Loading...</div>
+            ) : detail ? (
+              <EvidenceDetail detail={detail} onAddCustody={openCustodyModal} />
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {/* ── Log Custody Event Modal ── */}
+      {/* ── Add Evidence Modal ──────────────────────────────────────────── */}
+      {showAddModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+        }}>
+          <div style={{
+            background: "var(--cv-surface)", border: "1px solid var(--cv-border)",
+            borderRadius: "8px", padding: "28px", width: "560px", maxWidth: "95vw",
+            maxHeight: "88vh", overflowY: "auto",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between",
+              alignItems: "center", marginBottom: "22px" }}>
+              <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "var(--cv-text)" }}>
+                Add Evidence
+              </h3>
+              <button
+                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddError(""); }}
+                className="cv-btn cv-btn-ghost" style={{ padding: "4px 10px", fontSize: "12px" }}>
+                ✕
+              </button>
+            </div>
+
+            <FormField label="Evidence Type *">
+              <select value={addForm.evidence_type} className="cv-input"
+                onChange={(e) => setAddForm((f) => ({ ...f, evidence_type: e.target.value }))}>
+                {EVIDENCE_TYPES.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </FormField>
+
+            <FormField label="Description *">
+              <textarea value={addForm.description} rows={3} className="cv-input"
+                style={{ resize: "vertical" }} placeholder="Describe the evidence..."
+                onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))} />
+            </FormField>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <FormField label="Initial Status">
+                <select value={addForm.current_status} className="cv-input"
+                  onChange={(e) => setAddForm((f) => ({ ...f, current_status: e.target.value }))}>
+                  {EVIDENCE_STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Condition">
+                <select value={addForm.condition_status} className="cv-input"
+                  onChange={(e) => setAddForm((f) => ({ ...f, condition_status: e.target.value }))}>
+                  {CONDITION_STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Collection Location">
+              <input value={addForm.collection_location} className="cv-input"
+                placeholder="Scene address, lab, locker number..."
+                onChange={(e) => setAddForm((f) => ({ ...f, collection_location: e.target.value }))} />
+            </FormField>
+
+            <div style={{ padding: "14px 0 2px", marginBottom: "4px",
+              borderTop: "1px solid var(--cv-border)" }}>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--cv-text3)",
+                textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
+                Digital / File Metadata (optional)
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <FormField label="File Name">
+                  <input value={addForm.file_name} className="cv-input"
+                    placeholder="evidence_photo.jpg"
+                    onChange={(e) => setAddForm((f) => ({ ...f, file_name: e.target.value }))} />
+                </FormField>
+                <FormField label="File Type">
+                  <input value={addForm.file_type} className="cv-input"
+                    placeholder="image/jpeg"
+                    onChange={(e) => setAddForm((f) => ({ ...f, file_type: e.target.value }))} />
+                </FormField>
+              </div>
+
+              <FormField label="File Hash (SHA-256)">
+                <input value={addForm.file_hash} className="cv-input"
+                  placeholder="sha256:..."
+                  style={{ fontFamily: "monospace", fontSize: "11px" }}
+                  onChange={(e) => setAddForm((f) => ({ ...f, file_hash: e.target.value }))} />
+              </FormField>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <FormField label="Source Device">
+                  <input value={addForm.source_device} className="cv-input"
+                    placeholder="iPhone 15 Pro, CCTV cam 4..."
+                    onChange={(e) => setAddForm((f) => ({ ...f, source_device: e.target.value }))} />
+                </FormField>
+                <FormField label="Tags (comma-separated)">
+                  <input value={addForm.metadata_tags} className="cv-input"
+                    placeholder="cctv, outdoor, night"
+                    onChange={(e) => setAddForm((f) => ({ ...f, metadata_tags: e.target.value }))} />
+                </FormField>
+              </div>
+
+              <FormField label="Metadata Notes">
+                <textarea value={addForm.metadata_notes} rows={2} className="cv-input"
+                  style={{ resize: "vertical" }} placeholder="Additional context..."
+                  onChange={(e) => setAddForm((f) => ({ ...f, metadata_notes: e.target.value }))} />
+              </FormField>
+            </div>
+
+            {addError && (
+              <div style={{ color: "#f87171", fontSize: "12px", marginBottom: "12px" }}>
+                {addError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "4px" }}>
+              <button
+                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddError(""); }}
+                className="cv-btn cv-btn-secondary" style={{ padding: "7px 16px" }}>
+                Cancel
+              </button>
+              <button onClick={submitEvidence} disabled={addLoading}
+                className="cv-btn cv-btn-primary" style={{ padding: "7px 22px" }}>
+                {addLoading ? "Saving..." : "Add Evidence"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Log Custody Event Modal ─────────────────────────────────────── */}
       {showCustodyModal && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
@@ -598,11 +692,7 @@ function EvidencePage() {
                 Log Custody Event
               </h3>
               <button
-                onClick={() => {
-                  setShowCustodyModal(false);
-                  setCustodyForm(defaultCustodyForm());
-                  setCustodyError("");
-                }}
+                onClick={() => { setShowCustodyModal(false); setCustodyForm(defaultCustodyForm()); setCustodyError(""); }}
                 className="cv-btn cv-btn-ghost" style={{ padding: "4px 10px", fontSize: "12px" }}>
                 ✕
               </button>
@@ -659,11 +749,7 @@ function EvidencePage() {
 
                 <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                   <button
-                    onClick={() => {
-                      setShowCustodyModal(false);
-                      setCustodyForm(defaultCustodyForm());
-                      setCustodyError("");
-                    }}
+                    onClick={() => { setShowCustodyModal(false); setCustodyForm(defaultCustodyForm()); setCustodyError(""); }}
                     className="cv-btn cv-btn-secondary" style={{ padding: "7px 16px" }}>
                     Cancel
                   </button>
@@ -677,8 +763,8 @@ function EvidencePage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-export default EvidencePage;
+export default EvidencePanel;

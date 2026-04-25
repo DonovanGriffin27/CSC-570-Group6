@@ -1,6 +1,8 @@
+// Authored by James Williams in collaboration with Claude
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import CaseDetailPage from "./CaseDetailPage";
+import { API } from "../constants/api";
 
 const priorityColor = (p) =>
   p === "High" ? "#f87171" : p === "Medium" ? "#f59e0b" : "#34d399";
@@ -36,6 +38,7 @@ function AdminPage() {
   const jsonH = { "Content-Type": "application/json", ...authH };
 
   const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [caseStatusFilter, setCaseStatusFilter] = useState("Active");
 
   const [cases, setCases] = useState([]);
 
@@ -76,39 +79,39 @@ function AdminPage() {
   useEffect(() => { fetchRequests(); }, [reqFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCases = async () => {
-    const res = await fetch("http://127.0.0.1:8000/admin/cases", { headers: authH });
+    const res = await fetch(`${API}/admin/cases`, { headers: authH });
     if (res.ok) setCases(await res.json());
   };
 
   const fetchRequests = async () => {
     setReqLoading(true);
     const url = reqFilter === "All"
-      ? "http://127.0.0.1:8000/admin/account-requests"
-      : `http://127.0.0.1:8000/admin/account-requests?status_filter=${reqFilter}`;
+      ? `${API}/admin/account-requests`
+      : `${API}/admin/account-requests?status_filter=${reqFilter}`;
     const res = await fetch(url, { headers: authH });
     if (res.ok) setRequests(await res.json());
     setReqLoading(false);
   };
 
   const fetchDepartments = async () => {
-    const res = await fetch("http://127.0.0.1:8000/departments");
+    const res = await fetch(`${API}/departments`);
     if (res.ok) setDepartments(await res.json());
   };
 
   const fetchAdmins = async () => {
-    const res = await fetch("http://127.0.0.1:8000/admin/admins", { headers: authH });
+    const res = await fetch(`${API}/admin/admins`, { headers: authH });
     if (res.ok) setAdmins(await res.json());
   };
 
   const fetchAuditLog = async () => {
     setAuditLoading(true);
-    const res = await fetch("http://127.0.0.1:8000/admin/audit", { headers: authH });
+    const res = await fetch(`${API}/admin/audit`, { headers: authH });
     if (res.ok) setAuditLog(await res.json());
     setAuditLoading(false);
   };
 
   const decide = async (requestId, action) => {
-    const res = await fetch(`http://127.0.0.1:8000/admin/account-requests/${requestId}`, {
+    const res = await fetch(`${API}/admin/account-requests/${requestId}`, {
       method: "PATCH", headers: jsonH,
       body: JSON.stringify({ action }),
     });
@@ -122,7 +125,7 @@ function AdminPage() {
 
   const submitDepartment = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://127.0.0.1:8000/departments", {
+    const res = await fetch(`${API}/departments`, {
       method: "POST", headers: jsonH, body: JSON.stringify(deptForm),
     });
     const data = await res.json();
@@ -140,7 +143,7 @@ function AdminPage() {
   const submitLevelChange = async (userId) => {
     const newLevel = levelChanges[userId];
     if (!newLevel) return;
-    const res = await fetch(`http://127.0.0.1:8000/admin/admins/${userId}/level`, {
+    const res = await fetch(`${API}/admin/admins/${userId}/level`, {
       method: "PATCH", headers: jsonH,
       body: JSON.stringify({ admin_level: newLevel }),
     });
@@ -172,17 +175,34 @@ function AdminPage() {
               ← Back to Cases
             </button>
           </div>
+          <div style={{ padding: "8px 10px 4px", borderBottom: "1px solid var(--cv-border)", flexShrink: 0, display: "flex", gap: "4px" }}>
+            {["Active", "Closed"].map((f) => (
+              <button key={f} onClick={() => setCaseStatusFilter(f)}
+                style={{
+                  flex: 1, padding: "4px", fontSize: "10px", fontWeight: "600",
+                  borderRadius: "3px", cursor: "pointer", border: "1px solid",
+                  background: caseStatusFilter === f ? "var(--cv-blue-bg)" : "transparent",
+                  borderColor: caseStatusFilter === f ? "var(--cv-border2)" : "var(--cv-border)",
+                  color: caseStatusFilter === f ? "var(--cv-blue-l)" : "var(--cv-text3)",
+                }}>
+                {f}
+              </button>
+            ))}
+          </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {cases.map((c) => (
+            {cases
+              .filter((c) => caseStatusFilter === "Active" ? c.status !== "Closed" : c.status === "Closed")
+              .map((c) => (
               <div
                 key={c.case_id}
                 onClick={() => setSelectedCaseId(c.case_id)}
                 className={`cv-row${selectedCaseId === c.case_id ? " cv-row-selected" : ""}`}
                 style={{
                   padding: "11px 16px",
-                  borderLeft: `3px solid ${priorityColor(c.priority)}`,
+                  borderLeft: `3px solid ${c.status === "Closed" ? "#8b9ab4" : priorityColor(c.priority)}`,
                   borderBottom: "1px solid var(--cv-border)",
                   background: selectedCaseId === c.case_id ? "var(--cv-blue-bg)" : "transparent",
+                  opacity: c.status === "Closed" ? 0.75 : 1,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -198,8 +218,8 @@ function AdminPage() {
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0, paddingLeft: "8px" }}>
-                    <div style={{ fontSize: "11px", fontWeight: "600", color: priorityColor(c.priority) }}>
-                      {c.priority}
+                    <div style={{ fontSize: "11px", fontWeight: "600", color: c.status === "Closed" ? "#8b9ab4" : priorityColor(c.priority) }}>
+                      {c.status === "Closed" ? "Closed" : c.priority}
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--cv-text3)", marginTop: "2px" }}>
                       {new Date(c.date_opened).toLocaleDateString()}
@@ -249,20 +269,29 @@ function AdminPage() {
       {/* ══ CASES TAB ══ */}
       {activeTab === "Cases" && (
         <div>
-          <div style={{ marginBottom: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "14px" }}>
             <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--cv-text)" }}>
               All Cases
             </span>
-            <span style={{ fontSize: "12px", color: "var(--cv-text3)", marginLeft: "10px" }}>
+            <div style={{ display: "flex", gap: "6px" }}>
+              {["Active", "Closed"].map((f) => (
+                <button key={f} onClick={() => setCaseStatusFilter(f)}
+                  className={`cv-btn ${caseStatusFilter === f ? "cv-btn-primary" : "cv-btn-secondary"}`}
+                  style={{ padding: "4px 12px", fontSize: "12px" }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize: "12px", color: "var(--cv-text3)" }}>
               Click a case to view details and assign investigators
             </span>
           </div>
 
-          {cases.length === 0 ? (
-            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No cases found.</p>
+          {cases.filter((c) => caseStatusFilter === "Active" ? c.status !== "Closed" : c.status === "Closed").length === 0 ? (
+            <p style={{ color: "var(--cv-text3)", fontSize: "13px" }}>No {caseStatusFilter.toLowerCase()} cases found.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {cases.map((c) => (
+              {cases.filter((c) => caseStatusFilter === "Active" ? c.status !== "Closed" : c.status === "Closed").map((c) => (
                 <div key={c.case_id}
                   onClick={() => setSelectedCaseId(c.case_id)}
                   style={{
@@ -520,7 +549,7 @@ function AdminPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 {userEvents.map((a) => (
                   <div key={a._id} style={{
-                    display: "grid", gridTemplateColumns: "160px 1fr 160px",
+                    display: "grid", gridTemplateColumns: "max-content 1fr 160px",
                     alignItems: "center", gap: "12px",
                     padding: "9px 14px", background: "var(--cv-surface)",
                     border: "1px solid var(--cv-border)", borderLeft: "3px solid var(--cv-blue)",

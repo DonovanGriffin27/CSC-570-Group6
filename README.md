@@ -15,13 +15,17 @@ GitHub repository for CSC-570 Project (Group 6) — CaseVault, a law enforcement
 
 ---
 
-## Setup
+## Running the app locally
+
+You need your own PostgreSQL and MongoDB instances — the team's cloud credentials are not in this repo for security reasons. Follow the steps below to set up local databases, which takes about 10 minutes.
+
+---
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- A running PostgreSQL instance (Supabase or local)
-- A running MongoDB instance (Atlas or local)
+- PostgreSQL 14+ ([download](https://www.postgresql.org/download/))
+- MongoDB Community Edition ([download](https://www.mongodb.com/try/download/community)) **or** a free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster
 
 ---
 
@@ -34,36 +38,57 @@ cd CSC-570-Group6
 
 ---
 
-### 2. Backend
+### 2. Set up PostgreSQL
+
+If you installed PostgreSQL locally, create a database and apply the schema:
+
+```bash
+psql -U postgres -c "CREATE DATABASE casevault;"
+psql -U postgres -d casevault -f schema.sql
+```
+
+`schema.sql` is in the repo root — it creates all tables, enums, and indexes from scratch.
+
+---
+
+### 3. Set up MongoDB
+
+If running MongoDB locally, no extra setup is needed — the app will create its collections on first use. Just make sure `mongod` is running.
+
+To initialize the collection validators (optional but recommended):
+
+Open `backend/mongo/init.mongodb.js` in the MongoDB VS Code extension or run it via `mongosh`:
+
+```bash
+mongosh < backend/mongo/init.mongodb.js
+```
+
+---
+
+### 4. Configure environment variables
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `.env` with your database connection values. For a default local Postgres + MongoDB setup the example values should work as-is (just set `DB_PASS` to your Postgres password).
+
+---
+
+### 5. Start the backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
-```
-
-Create a `.env` file inside the `backend/` folder with the following:
-
-```
-DATABASE_URL=your_postgres_connection_string
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_secret_key
-```
-
-Initialize the MongoDB collections (run once):
-
-Open `backend/mongo/init.mongodb.js` in the MongoDB VS Code extension or Atlas playground and run it.
-
-Start the backend server:
-
-```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://127.0.0.1:8000`.
+API available at `http://127.0.0.1:8000`.
 
 ---
 
-### 3. Frontend
+### 6. Start the frontend
 
 ```bash
 cd frontend
@@ -71,13 +96,11 @@ npm install
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+App available at `http://localhost:5173`.
 
 ---
 
 ### Notes
-- The PostgreSQL schema (tables, constraints) must already be applied. Contact the SQL architect for the schema script.
-- The `.env` file is gitignored and must be created manually — it is never committed to the repo.
-- Both the backend server and frontend dev server must be running at the same time for the app to function.
-
-JWT_SECRET=casevault_super_secret_change_this_in_production
+- Both servers must be running at the same time.
+- The `.env` file is gitignored and is never committed — always create it from `.env.example`.
+- If using Supabase or MongoDB Atlas instead of local instances, paste your connection string values into `.env` — the app works the same either way.

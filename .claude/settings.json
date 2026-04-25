@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from PIL import Image; print\\('ok'\\)\")",
+      "Bash(pip3.13 install *)",
+      "Bash(python3.13 -c \"from PIL import Image; print\\('ok'\\)\")",
+      "Bash(python3.13 -)"
+    ]
+  }
+}
