@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.connection import get_connection
@@ -60,10 +61,10 @@ def file_crime_report(report: CrimeReportCreate, current_user=Depends(get_curren
 @router.get("/crime-reports/{case_id}")
 def get_case_reports(case_id: int, current_user=Depends(get_current_user)):
     conn = get_connection()
-    reports = get_reports_by_case(conn, case_id)
-    conn.close()
-
+    try:
+        reports = get_reports_by_case(conn, case_id)
+    finally:
+        conn.close()
     if not reports:
         raise HTTPException(status_code=404, detail="No reports found for this case")
-
     return reports

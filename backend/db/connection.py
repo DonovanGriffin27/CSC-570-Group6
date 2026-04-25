@@ -1,3 +1,4 @@
+# Authored by James Williams
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -11,5 +12,5 @@ def get_connection():
         password=os.getenv("DB_PASS"),
         host=os.getenv("DB_HOST"),
         port=os.getenv("DB_PORT"),
-        sslmode="require"   # 🔥 DO NOT SKIP THIS
+        sslmode="require"  
     )

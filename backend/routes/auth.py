@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
@@ -70,6 +71,12 @@ def login(body: LoginRequest):
         full_name = f"{user['first_name']} {user['last_name']}"
         token = create_token(user["user_id"], user["email"], role,
                              admin_level, user["department_id"], full_name)
+        db = get_mongo_db()
+        log_audit_event(
+            db, user["user_id"], "USER_LOGIN",
+            f"{full_name} signed in",
+            user_name=full_name,
+        )
         return {
             "access_token": token,
             "token_type": "bearer",
@@ -176,17 +183,24 @@ def request_account(body: AccountRequestCreate):
             rank=body.rank,
             password_hash=pw_hash,
         )
-        return {"message": "Account request submitted. An admin will review it shortly.",
-                "request_id": request_id}
     except Exception as e:
         conn.rollback()
-        # Duplicate email gives a clear error
         if "unique" in str(e).lower():
             raise HTTPException(status_code=409,
                                 detail="An account request with that email already exists.")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+    full_name = f"{body.first_name} {body.last_name}"
+    db = get_mongo_db()
+    log_audit_event(
+        db, 0, "ACCOUNT_REQUEST_SUBMITTED",
+        f"{full_name} ({body.contact_email}) submitted an account request for {body.requested_role} role",
+        user_name=full_name,
+    )
+    return {"message": "Account request submitted. An admin will review it shortly.",
+            "request_id": request_id}
 
 
 

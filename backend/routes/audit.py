@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends
 from db.mongo_connection import get_mongo_db
 from db.queries.mongo_queries import get_audit_by_case, get_audit_by_user

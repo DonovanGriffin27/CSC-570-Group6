@@ -1,3 +1,4 @@
+# Authored by James Williams
 def create_case(conn, priority, title=None):
     cur = conn.cursor()
 

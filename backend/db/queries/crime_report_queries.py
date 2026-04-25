@@ -1,3 +1,4 @@
+# Authored by James Williams
 def create_crime_report(conn, case_id, filed_by_user_id, report_type, description):
     cur = conn.cursor()
 

@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -31,19 +32,31 @@ class CaseUpdate(BaseModel):
 @router.post("/cases")
 def create_case_route(case: CaseCreate, current_user=Depends(require_admin)):
     conn = get_connection()
-    case_id, case_number = create_case(conn, case.priority)
-    conn.close()
+    try:
+        case_id, case_number = create_case(conn, case.priority)
+    finally:
+        conn.close()
+
+    name = current_user.get("name", f"User {current_user['user_id']}")
+    db = get_mongo_db()
+    log_audit_event(
+        db, current_user["user_id"], "CASE_CREATED",
+        f"{name} created case {case_number}",
+        case_id=case_id, user_name=name,
+    )
+
     return {"case_id": case_id, "case_number": case_number}
 
 @router.patch("/cases/{case_id}")
 def update_case_route(case_id: int, body: CaseUpdate, current_user=Depends(get_current_user)):
     conn = get_connection()
-    case = get_case_by_id(conn, case_id)
-    if not case:
+    try:
+        case = get_case_by_id(conn, case_id)
+        if not case:
+            raise HTTPException(status_code=404, detail="Case not found")
+        update_case_details(conn, case_id, body.title, body.priority, body.status)
+    finally:
         conn.close()
-        raise HTTPException(status_code=404, detail="Case not found")
-    update_case_details(conn, case_id, body.title, body.priority, body.status)
-    conn.close()
 
     name = current_user.get("name", f"User {current_user['user_id']}")
     case_number = case.get("case_number", str(case_id))

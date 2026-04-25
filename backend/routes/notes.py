@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.mongo_connection import get_mongo_db

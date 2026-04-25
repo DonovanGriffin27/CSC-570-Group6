@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.connection import get_connection
@@ -14,7 +15,7 @@ VALID_ADMIN_LEVELS = {"SUPER_ADMIN", "ADMIN", "SUPERVISOR", "VIEWER"}
 
 
 def _dept_scope(admin: dict):
-    """Return the department_id to filter by, or None if super admin (sees all)."""
+    # None means super admin — no dept filter, sees everything
     if admin.get("admin_level") == "SUPER_ADMIN":
         return None
     return admin.get("department_id")

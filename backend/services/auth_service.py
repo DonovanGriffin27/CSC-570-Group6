@@ -1,3 +1,4 @@
+# Authored by James Williams
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -44,9 +45,5 @@ def create_token(user_id: int, email: str, role: str,
 
 
 def decode_token(token: str) -> dict:
-    """
-    Decode and validate the token.
-    Raises jose.JWTError if invalid or expired.
-    Returns the payload dict with keys: sub, email, role, exp.
-    """
+    # raises JWTError if invalid or expired
     return jwt.decode(token, _SECRET, algorithms=[_ALGORITHM])

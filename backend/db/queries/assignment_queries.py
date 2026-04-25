@@ -1,3 +1,4 @@
+# Authored by James Williams
 def assign_investigator(conn, case_id, user_id):
     cur = conn.cursor()
 
@@ -62,7 +63,7 @@ def get_cases_by_investigator(conn, user_id):
         SELECT c.case_id, c.case_number, c.title, c.status, c.priority, c.date_opened
         FROM cases c
         JOIN assignment a ON c.case_id = a.case_id
-        WHERE a.user_id = %s AND c.status = 'In Progress'
+        WHERE a.user_id = %s
         ORDER BY c.date_opened DESC;
     """, (user_id,))
 

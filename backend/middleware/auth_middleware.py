@@ -1,3 +1,4 @@
+# Authored by James Williams
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -38,7 +39,7 @@ def get_current_user(
 
 
 def require_any_admin(user: dict = Depends(get_current_user)) -> dict:
-    """Any admin role — including SUPERVISOR and VIEWER (read-only levels)."""
+    # includes SUPERVISOR and VIEWER (read-only levels)
     if user["role"] != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Admin access required")
@@ -46,8 +47,7 @@ def require_any_admin(user: dict = Depends(get_current_user)) -> dict:
 
 
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    """Operational admin: ADMIN or SUPER_ADMIN.
-    Can approve accounts, assign investigators, edit cases."""
+    # ADMIN or SUPER_ADMIN — can approve accounts, assign investigators, edit cases
     if user["role"] != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Admin access required")
@@ -58,7 +58,7 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 
 def require_super_admin(user: dict = Depends(get_current_user)) -> dict:
-    """SUPER_ADMIN only — manage admin accounts and levels."""
+    # SUPER_ADMIN only — manages admin accounts and levels
     if user["role"] != "admin" or user.get("admin_level") != "SUPER_ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Super admin access required")

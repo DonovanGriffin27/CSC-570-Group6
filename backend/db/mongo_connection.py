@@ -1,3 +1,4 @@
+# Authored by James Williams
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv

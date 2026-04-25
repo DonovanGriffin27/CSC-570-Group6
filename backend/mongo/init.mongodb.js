@@ -101,7 +101,11 @@ if (!db.getCollectionNames().includes("timeline_events")) {
           case_id: { bsonType: "int" },
           event_type: {
             bsonType: "string",
-            enum: ["STATUS_CHANGE", "NOTE_ADDED", "EVIDENCE_ADDED", "REPORT_FILED"]
+            enum: [
+              "STATUS_CHANGE", "NOTE_ADDED", "EVIDENCE_ADDED", "REPORT_FILED",
+              "SUSPECT_ADDED", "VICTIM_ADDED", "SUSPECT_REMOVED", "VICTIM_REMOVED",
+              "COURT_DATE_ADDED"
+            ]
           },
           created_by_user_id: { bsonType: "int" },
           time_stamp: { bsonType: "date" },

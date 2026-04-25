@@ -1,3 +1,4 @@
+# Authored by James Williams
 #  User lookup
 
 def get_user_by_email(conn, email: str):
@@ -176,13 +177,7 @@ def get_account_request_by_id(conn, request_id: int):
 
 
 def approve_account_request(conn, request_id: int, reviewed_by: int):
-    """
-    1. Pull the request row.
-    2. INSERT into users.
-    3. INSERT into admin or investigator.
-    4. Mark request status = 'Approved'.
-    Returns the new user_id.
-    """
+    # pull request, create user + role row, mark approved — returns new user_id
     req = get_account_request_by_id(conn, request_id)
     if not req:
         raise ValueError(f"Account request {request_id} not found")
