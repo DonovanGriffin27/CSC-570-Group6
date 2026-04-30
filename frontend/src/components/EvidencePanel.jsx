@@ -1,5 +1,5 @@
 // Authored by James Williams in collaboration with Claude
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { API } from "../constants/api";
 import {
@@ -41,7 +41,6 @@ function defaultAddForm() {
   return {
     evidence_type: "Physical Item", description: "", current_status: "Collected",
     collection_location: "", condition_status: "Unknown",
-    file_name: "", file_type: "", file_hash: "",
     metadata_tags: "", source_device: "", metadata_notes: "",
   };
 }
@@ -50,9 +49,23 @@ function defaultCustodyForm() {
   return { action_type: "", location: "", condition_status: "", notes: "" };
 }
 
+const ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain", "text/csv",
+  "image/jpeg", "image/png", "image/tiff", "image/bmp",
+  "video/mp4", "video/quicktime", "video/x-msvideo",
+  "audio/mpeg", "audio/wav",
+]);
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+
 // ── Evidence detail right panel ────────────────────────────────────────────
 
-function EvidenceDetail({ detail, onAddCustody }) {
+function EvidenceDetail({ detail, onAddCustody, fileProps }) {
   const { evidence, metadata, custody_chain } = detail;
 
   return (
@@ -201,6 +214,36 @@ function EvidenceDetail({ detail, onAddCustody }) {
         </>
       ) : null}
 
+      {/* Attached File */}
+      <div style={{ borderTop: "1px solid var(--cv-border)", margin: "4px 0 18px" }} />
+      <div style={{ marginBottom: "18px" }}>
+        <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--cv-text2)",
+          textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>
+          Attached File
+        </div>
+        {metadata?.storage_path ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "12px", color: "var(--cv-text2)" }}>
+              {metadata.file_name || "evidence-file"}
+            </span>
+            <button onClick={fileProps.onDownload} className="cv-btn cv-btn-ghost"
+              style={{ padding: "3px 10px", fontSize: "11px" }}>
+              Download
+            </button>
+          </div>
+        ) : (
+          <button onClick={fileProps.onUpload} disabled={fileProps.uploading}
+            className="cv-btn cv-btn-secondary" style={{ padding: "4px 14px", fontSize: "12px" }}>
+            {fileProps.uploading ? "Uploading..." : "+ Attach File"}
+          </button>
+        )}
+        {fileProps.error && (
+          <div style={{ color: "#f87171", fontSize: "12px", marginTop: "6px" }}>
+            {fileProps.error}
+          </div>
+        )}
+      </div>
+
       {/* Chain of Custody */}
       <div style={{ borderTop: "1px solid var(--cv-border)", margin: "4px 0 18px" }} />
       <div>
@@ -312,6 +355,8 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
 
   const [showAddModal, setShowAddModal]   = useState(false);
   const [addForm, setAddForm]             = useState(defaultAddForm());
+  const [addFile, setAddFile]             = useState(null);
+  const [addFileHash, setAddFileHash]     = useState(null);
   const [addLoading, setAddLoading]       = useState(false);
   const [addError, setAddError]           = useState("");
 
@@ -319,6 +364,10 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
   const [custodyForm, setCustodyForm]           = useState(defaultCustodyForm());
   const [custodyLoading, setCustodyLoading]     = useState(false);
   const [custodyError, setCustodyError]         = useState("");
+
+  const fileInputRef   = useRef(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError]     = useState("");
 
   useEffect(() => { fetchList(); }, [caseId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -354,6 +403,28 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
     setShowCustodyModal(true);
   };
 
+  const handleAddFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) { setAddFile(null); setAddFileHash(null); return; }
+    if (!ALLOWED_TYPES.has(file.type)) {
+      setAddError("File type not allowed. Accepted: PDF, Word, Excel, TXT, CSV, JPG, PNG, TIFF, BMP, MP4, MOV, AVI, MP3, WAV.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setAddError("File exceeds the 50 MB size limit.");
+      e.target.value = "";
+      return;
+    }
+    setAddFile(file);
+    setAddError("");
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const hex = Array.from(new Uint8Array(hashBuf))
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+    setAddFileHash(`sha256:${hex}`);
+  };
+
   const submitEvidence = async () => {
     if (!addForm.description.trim()) { setAddError("Description is required."); return; }
     setAddLoading(true);
@@ -369,27 +440,39 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
       collected_by_user_id: user.user_id,
       collection_location:  addForm.collection_location || null,
       condition_status:     addForm.condition_status,
-      file_name:            addForm.file_name      || null,
-      file_type:            addForm.file_type      || null,
-      file_hash:            addForm.file_hash      || null,
+      file_name:            addFile?.name             || null,
+      file_type:            addFile?.type             || null,
+      file_hash:            addFileHash               || null,
       metadata_tags:        tags,
-      source_device:        addForm.source_device  || null,
-      metadata_notes:       addForm.metadata_notes || null,
+      source_device:        addForm.source_device     || null,
+      metadata_notes:       addForm.metadata_notes    || null,
     };
     const r = await fetch(`${API}/evidence`, {
       method: "POST", headers: authHeaders, body: JSON.stringify(body),
     });
-    setAddLoading(false);
-    if (r.ok) {
-      const data = await r.json();
-      setShowAddModal(false);
-      setAddForm(defaultAddForm());
-      await fetchList();
-      setSelectedId(data.evidence_id);
-    } else {
+    if (!r.ok) {
+      setAddLoading(false);
       const data = await r.json().catch(() => ({}));
       setAddError(data.detail || "Failed to add evidence.");
+      return;
     }
+    const data = await r.json();
+    if (addFile) {
+      const formData = new FormData();
+      formData.append("file", addFile);
+      await fetch(`${API}/evidence/${data.evidence_id}/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+    }
+    setAddLoading(false);
+    setShowAddModal(false);
+    setAddForm(defaultAddForm());
+    setAddFile(null);
+    setAddFileHash(null);
+    await fetchList();
+    setSelectedId(data.evidence_id);
   };
 
   const submitCustodyEvent = async () => {
@@ -416,6 +499,48 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
     } else {
       const data = await r.json().catch(() => ({}));
       setCustodyError(data.detail || "Failed to log custody event.");
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      setUploadError("File type not allowed. Accepted: PDF, Word, Excel, TXT, CSV, JPG, PNG, TIFF, BMP, MP4, MOV, AVI, MP3, WAV.");
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setUploadError("File exceeds the 50 MB size limit.");
+      return;
+    }
+
+    setUploadLoading(true);
+    setUploadError("");
+    const formData = new FormData();
+    formData.append("file", file);
+    const r = await fetch(`${API}/evidence/${selectedId}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    setUploadLoading(false);
+    if (r.ok) {
+      await fetchDetail(selectedId);
+    } else {
+      const data = await r.json().catch(() => ({}));
+      setUploadError(data.detail || "Upload failed.");
+    }
+  };
+
+  const handleDownload = async () => {
+    const r = await fetch(`${API}/evidence/${selectedId}/file`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) {
+      const data = await r.json();
+      window.open(data.url, "_blank");
     }
   };
 
@@ -545,11 +670,29 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
             ) : detailLoading ? (
               <div style={{ color: "var(--cv-text3)", fontSize: "13px" }}>Loading...</div>
             ) : detail ? (
-              <EvidenceDetail detail={detail} onAddCustody={openCustodyModal} />
+              <EvidenceDetail
+                detail={detail}
+                onAddCustody={openCustodyModal}
+                fileProps={{
+                  onUpload: () => { setUploadError(""); fileInputRef.current?.click(); },
+                  onDownload: handleDownload,
+                  uploading: uploadLoading,
+                  error: uploadError,
+                }}
+              />
             ) : null}
           </div>
         </div>
       </div>
+
+      {/* Hidden file input for evidence upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: "none" }}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.tiff,.bmp,.mp4,.mov,.avi,.mp3,.wav"
+        onChange={handleFileChange}
+      />
 
       {/* ── Add Evidence Modal ──────────────────────────────────────────── */}
       {showAddModal && (
@@ -568,7 +711,7 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
                 Add Evidence
               </h3>
               <button
-                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddError(""); }}
+                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddFile(null); setAddFileHash(null); setAddError(""); }}
                 className="cv-btn cv-btn-ghost" style={{ padding: "4px 10px", fontSize: "12px" }}>
                 ✕
               </button>
@@ -615,24 +758,28 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
                 Digital / File Metadata (optional)
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <FormField label="File Name">
-                  <input value={addForm.file_name} className="cv-input"
-                    placeholder="evidence_photo.jpg"
-                    onChange={(e) => setAddForm((f) => ({ ...f, file_name: e.target.value }))} />
-                </FormField>
-                <FormField label="File Type">
-                  <input value={addForm.file_type} className="cv-input"
-                    placeholder="image/jpeg"
-                    onChange={(e) => setAddForm((f) => ({ ...f, file_type: e.target.value }))} />
-                </FormField>
-              </div>
-
-              <FormField label="File Hash (SHA-256)">
-                <input value={addForm.file_hash} className="cv-input"
-                  placeholder="sha256:..."
-                  style={{ fontFamily: "monospace", fontSize: "11px" }}
-                  onChange={(e) => setAddForm((f) => ({ ...f, file_hash: e.target.value }))} />
+              <FormField label="File Attachment">
+                <input
+                  type="file"
+                  className="cv-input"
+                  style={{ padding: "5px 8px", cursor: "pointer" }}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.tiff,.bmp,.mp4,.mov,.avi,.mp3,.wav"
+                  onChange={handleAddFileSelect}
+                />
+                {addFile && (
+                  <div style={{ marginTop: "7px", fontSize: "11px", color: "var(--cv-text3)" }}>
+                    <span style={{ color: "var(--cv-text2)", fontWeight: "500" }}>{addFile.name}</span>
+                    {" · "}{(addFile.size / 1024 / 1024).toFixed(2)} MB · {addFile.type}
+                    {addFileHash && (
+                      <div style={{
+                        fontFamily: "monospace", fontSize: "10px", marginTop: "3px",
+                        wordBreak: "break-all", color: "var(--cv-text3)",
+                      }}>
+                        {addFileHash}
+                      </div>
+                    )}
+                  </div>
+                )}
               </FormField>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -663,13 +810,13 @@ function EvidencePanel({ caseId, bodyMinHeight = "380px" }) {
 
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "4px" }}>
               <button
-                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddError(""); }}
+                onClick={() => { setShowAddModal(false); setAddForm(defaultAddForm()); setAddFile(null); setAddFileHash(null); setAddError(""); }}
                 className="cv-btn cv-btn-secondary" style={{ padding: "7px 16px" }}>
                 Cancel
               </button>
               <button onClick={submitEvidence} disabled={addLoading}
                 className="cv-btn cv-btn-primary" style={{ padding: "7px 22px" }}>
-                {addLoading ? "Saving..." : "Add Evidence"}
+                {addLoading ? (addFile ? "Uploading..." : "Saving...") : "Add Evidence"}
               </button>
             </div>
           </div>

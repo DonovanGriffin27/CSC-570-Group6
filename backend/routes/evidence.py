@@ -1,5 +1,5 @@
 # Authored by James Williams
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
@@ -12,9 +12,13 @@ from db.queries.evidence_queries import (
 )
 from db.queries.custody_queries import create_custody_event, get_custody_chain
 from db.queries.evidence_metadata_queries import (
-    create_evidence_metadata, get_evidence_metadata,
+    create_evidence_metadata, get_evidence_metadata, update_evidence_file,
 )
 from db.queries.mongo_queries import add_timeline_event, log_audit_event
+from db.supabase_storage import (
+    upload_evidence_file, get_signed_url,
+    ALLOWED_MIME_TYPES, MAX_FILE_SIZE,
+)
 from middleware.auth_middleware import get_current_user
 
 router = APIRouter()
@@ -275,3 +279,61 @@ def add_custody_event(evidence_id: int, body: CustodyEventCreate,
     )
 
     return {"custody_event_id": custody_event_id}
+
+
+# ── POST /evidence/{evidence_id}/upload ──────────────────────────────────────
+
+@router.post("/evidence/{evidence_id}/upload")
+async def upload_file(evidence_id: int, file: UploadFile = File(...),
+                      current_user=Depends(get_current_user)):
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{file.content_type}' is not allowed. "
+                   "Accepted: PDF, Word, Excel, TXT, CSV, JPG, PNG, TIFF, BMP, MP4, MOV, AVI, MP3, WAV.",
+        )
+
+    data = await file.read()
+    if len(data) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File exceeds the 50 MB size limit.")
+
+    conn = get_connection()
+    try:
+        ev = get_evidence_by_id(conn, evidence_id)
+        if not ev:
+            raise HTTPException(status_code=404, detail="Evidence not found")
+    finally:
+        conn.close()
+
+    db = get_mongo_db()
+    existing = get_evidence_metadata(db, evidence_id)
+    if existing and existing.get("storage_path"):
+        raise HTTPException(
+            status_code=409,
+            detail="A file is already attached to this evidence record. Evidence files cannot be replaced.",
+        )
+
+    storage_path = upload_evidence_file(evidence_id, file.filename, data, file.content_type)
+
+    name = current_user.get("name", f"User {current_user['user_id']}")
+    update_evidence_file(db, evidence_id, storage_path, file.filename, file.content_type)
+    log_audit_event(
+        db, current_user["user_id"], "EVIDENCE_FILE_UPLOADED",
+        f"{name} uploaded file '{file.filename}' for evidence #{evidence_id}",
+        case_id=ev["case_id"], user_name=name,
+    )
+
+    return {"storage_path": storage_path, "file_name": file.filename}
+
+
+# ── GET /evidence/{evidence_id}/file ─────────────────────────────────────────
+
+@router.get("/evidence/{evidence_id}/file")
+def get_evidence_file(evidence_id: int, current_user=Depends(get_current_user)):
+    db       = get_mongo_db()
+    metadata = get_evidence_metadata(db, evidence_id)
+    if not metadata or not metadata.get("storage_path"):
+        raise HTTPException(status_code=404, detail="No file attached to this evidence.")
+
+    signed_url = get_signed_url(metadata["storage_path"])
+    return {"url": signed_url, "file_name": metadata.get("file_name", "evidence-file")}

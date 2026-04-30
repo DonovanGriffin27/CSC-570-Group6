@@ -32,32 +32,6 @@ db.investigation_notes.createIndex({ case_id: 1 });
 
 
 
-// Interview Summaries
-if (!db.getCollectionNames().includes("interview_summaries")) {
-  db.createCollection("interview_summaries", {
-    validator: {
-      $jsonSchema: {
-        bsonType: "object",
-        required: ["case_id", "created_by_user_id", "summary_text", "time_stamp"],
-        properties: {
-          case_id: { bsonType: "int" },
-          created_by_user_id: { bsonType: "int" },
-          summary_text: { bsonType: "string" },
-          time_stamp: { bsonType: "date" }
-        }
-      }
-    },
-    validationLevel: "strict",
-    validationAction: "error"
-  });
-}
-
-
-db.interview_summaries.createIndex({ case_id: 1 });
-
-
-
-
 // Evidence Metadata
 if (!db.getCollectionNames().includes("evidence_metadata")) {
   db.createCollection("evidence_metadata", {
@@ -144,3 +118,58 @@ if (!db.getCollectionNames().includes("audit_events")) {
 
 
 db.audit_events.createIndex({ user_id: 1 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Interview Summaries
+if (!db.getCollectionNames().includes("interview_summaries")) {
+  db.createCollection("interview_summaries", {
+    validator: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["case_id", "created_by_user_id", "summary_text", "time_stamp"],
+        properties: {
+          case_id: { bsonType: "int" },
+          created_by_user_id: { bsonType: "int" },
+          summary_text: { bsonType: "string" },
+          time_stamp: { bsonType: "date" }
+        }
+      }
+    },
+    validationLevel: "strict",
+    validationAction: "error"
+  });
+}
+
+
+db.interview_summaries.createIndex({ case_id: 1 });

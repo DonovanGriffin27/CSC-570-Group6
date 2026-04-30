@@ -1,5 +1,5 @@
 // Authored by James Williams in collaboration with Claude
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { API } from "../constants/api";
 import {
@@ -41,9 +41,23 @@ function defaultCustodyForm() {
   return { action_type: "", location: "", condition_status: "", notes: "" };
 }
 
+const ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain", "text/csv",
+  "image/jpeg", "image/png", "image/tiff", "image/bmp",
+  "video/mp4", "video/quicktime", "video/x-msvideo",
+  "audio/mpeg", "audio/wav",
+]);
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
 // ── Evidence detail panel ──────────────────────────────────────────────────
 
-function PortalDetail({ detail, onAddCustody }) {
+function PortalDetail({ detail, onAddCustody, fileProps }) {
   const { evidence, metadata, custody_chain } = detail;
 
   return (
@@ -208,6 +222,36 @@ function PortalDetail({ detail, onAddCustody }) {
         </>
       ) : null}
 
+      {/* Attached File */}
+      <div style={{ borderTop: "1px solid var(--cv-border)", margin: "4px 0 18px" }} />
+      <div style={{ marginBottom: "18px" }}>
+        <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--cv-text2)",
+          textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>
+          Attached File
+        </div>
+        {metadata?.storage_path ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "12px", color: "var(--cv-text2)" }}>
+              {metadata.file_name || "evidence-file"}
+            </span>
+            <button onClick={fileProps.onDownload} className="cv-btn cv-btn-ghost"
+              style={{ padding: "3px 10px", fontSize: "11px" }}>
+              Download
+            </button>
+          </div>
+        ) : (
+          <button onClick={fileProps.onUpload} disabled={fileProps.uploading}
+            className="cv-btn cv-btn-secondary" style={{ padding: "4px 14px", fontSize: "12px" }}>
+            {fileProps.uploading ? "Uploading..." : "+ Attach File"}
+          </button>
+        )}
+        {fileProps.error && (
+          <div style={{ color: "#f87171", fontSize: "12px", marginTop: "6px" }}>
+            {fileProps.error}
+          </div>
+        )}
+      </div>
+
       {/* Chain of Custody */}
       <div style={{ borderTop: "1px solid var(--cv-border)", margin: "4px 0 18px" }} />
       <div>
@@ -320,6 +364,10 @@ function EvidencePage() {
   const [custodyLoading, setCustodyLoading]     = useState(false);
   const [custodyError, setCustodyError]         = useState("");
 
+  const fileInputRef                    = useRef(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError]     = useState("");
+
   useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAll = async () => {
@@ -376,6 +424,48 @@ function EvidencePage() {
     } else {
       const data = await r.json().catch(() => ({}));
       setCustodyError(data.detail || "Failed to log custody event.");
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      setUploadError("File type not allowed. Accepted: PDF, Word, Excel, TXT, CSV, JPG, PNG, TIFF, BMP, MP4, MOV, AVI, MP3, WAV.");
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setUploadError("File exceeds the 50 MB size limit.");
+      return;
+    }
+
+    setUploadLoading(true);
+    setUploadError("");
+    const formData = new FormData();
+    formData.append("file", file);
+    const r = await fetch(`${API}/evidence/${selectedId}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    setUploadLoading(false);
+    if (r.ok) {
+      await fetchDetail(selectedId);
+    } else {
+      const data = await r.json().catch(() => ({}));
+      setUploadError(data.detail || "Upload failed.");
+    }
+  };
+
+  const handleDownload = async () => {
+    const r = await fetch(`${API}/evidence/${selectedId}/file`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) {
+      const data = await r.json();
+      window.open(data.url, "_blank");
     }
   };
 
@@ -577,10 +667,28 @@ function EvidencePage() {
               Loading detail...
             </div>
           ) : detail ? (
-            <PortalDetail detail={detail} onAddCustody={openCustodyModal} />
+            <PortalDetail
+              detail={detail}
+              onAddCustody={openCustodyModal}
+              fileProps={{
+                onUpload: () => { setUploadError(""); fileInputRef.current?.click(); },
+                onDownload: handleDownload,
+                uploading: uploadLoading,
+                error: uploadError,
+              }}
+            />
           ) : null}
         </div>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: "none" }}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.tiff,.bmp,.mp4,.mov,.avi,.mp3,.wav"
+        onChange={handleFileChange}
+      />
 
       {/* ── Log Custody Event Modal ── */}
       {showCustodyModal && (

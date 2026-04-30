@@ -36,3 +36,11 @@ def get_evidence_metadata(db, evidence_id: int) -> dict | None:
     if not doc:
         return None
     return _serialize(doc)
+
+
+def update_evidence_file(db, evidence_id: int, storage_path: str, file_name: str, file_type: str):
+    db.evidence_metadata.update_one(
+        {"evidence_id": evidence_id},
+        {"$set": {"storage_path": storage_path, "file_name": file_name, "file_type": file_type}},
+        upsert=True,
+    )

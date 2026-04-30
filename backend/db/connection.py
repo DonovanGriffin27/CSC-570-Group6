@@ -12,5 +12,9 @@ def get_connection():
         password=os.getenv("DB_PASS"),
         host=os.getenv("DB_HOST"),
         port=os.getenv("DB_PORT"),
-        sslmode="require"  
+        sslmode="require",
+        keepalives=1,
+        keepalives_idle=10,
+        keepalives_interval=2,
+        keepalives_count=5,
     )

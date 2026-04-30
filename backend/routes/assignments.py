@@ -52,8 +52,6 @@ def get_case_assignments(case_id: int, current_user=Depends(get_current_user)):
         assignments = get_assignments_by_case(conn, case_id)
     finally:
         conn.close()
-    if not assignments:
-        raise HTTPException(status_code=404, detail="No assignments found for this case")
     return assignments
 
 @router.get("/assignments/investigator/{user_id}")
